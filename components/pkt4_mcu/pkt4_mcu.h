@@ -49,7 +49,13 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		        sw_ver_;
 		bool inited_{false};
 		MCUPacket packet_;
+		uint8_t rx_len_{0};  // bytes of packet_ received so far
+		uint32_t rx_dropped_{0},
+		         rx_dropped_total_{0};
 		uint8_t seq_{0};
+
+		bool read_packet_();
+		void handle_packet_();
 
 		sensor::Sensor *distance_sensor_{nullptr},
 		               *weight_sensor_{nullptr},
