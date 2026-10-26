@@ -42,7 +42,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 
 		void init(void);
 		void deinit(void);
-		void motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout);
+		void motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout, uint8_t pos = 0);
 
 	protected:
 		uint8_t hw_ver_,
@@ -89,11 +89,12 @@ template<typename... Ts> class MotorAction: public Action<Ts...>, public Parente
 		void set_speed(uint8_t speed) { this->speed_ = speed; }
 		void set_duration(uint16_t duration) { this->duration_ = duration; }
 		void set_timeout(uint16_t timeout) { this->timeout_ = timeout; }
+		void set_pos(uint8_t pos) { this->pos_ = pos; }
 
-		void play(const Ts &...x) override { this->parent_->motor(this->motor_, this->mode_, this->direction_, this->speed_, this->duration_, this->timeout_); }
+		void play(const Ts &...x) override { this->parent_->motor(this->motor_, this->mode_, this->direction_, this->speed_, this->duration_, this->timeout_, this->pos_); }
 
 	protected:
-		uint8_t motor_, mode_, direction_, speed_{0};
+		uint8_t motor_, mode_, direction_, speed_{0}, pos_{0};
 		uint16_t duration_{0}, timeout_{0};
 };
 

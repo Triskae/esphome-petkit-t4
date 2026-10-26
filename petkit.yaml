@@ -1425,21 +1425,59 @@ script:
                       then:
                         if:
                           condition:
-                            - binary_sensor.is_off: drum_down
+                            - switch.is_on: clean
                           then:
-                            pkt4_mcu.motor:
-                              motor: drum
-                              direction: down
-                              speed: 100
-                              mode: time
-                              timeout: 1000
-                          else:
-                            pkt4_mcu.motor:
-                              motor: drum
-                              direction: up
-                              speed: 100
-                              mode: time
-                              timeout: 80
+                            if:
+                              condition:
+                                - binary_sensor.is_off: drum_down
+                              then:
+                                pkt4_mcu.motor:
+                                  motor: drum
+                                  direction: down
+                                  speed: 100
+                                  mode: time
+                                  timeout: 1000
+                              else:
+                                pkt4_mcu.motor:
+                                  motor: drum
+                                  direction: up
+                                  speed: 100
+                                  mode: time
+                                  timeout: 80
+                          else:  # plain leveling: let the MCU stop at the level sensor itself, as stock does
+                            if:
+                              condition:
+                                - binary_sensor.is_off: drum_level  # already level: the MCU won't move, so no release event will come
+                              then:
+                                - globals.set:
+                                    id: level_needed
+                                    value: 'false'
+                                - pkt4_mcu.motor:
+                                    motor: tray
+                                    direction: close
+                                    speed: 5
+                                    mode: time
+                                    timeout: 80
+                              else:
+                                if:
+                                  condition:
+                                    - binary_sensor.is_off: drum_down
+                                  then:
+                                    pkt4_mcu.motor:
+                                      motor: drum
+                                      direction: down
+                                      speed: 100
+                                      mode: time
+                                      timeout: 800
+                                      pos: level
+                                  else:
+                                    pkt4_mcu.motor:
+                                      motor: drum
+                                      direction: up
+                                      speed: 100
+                                      mode: time
+                                      timeout: 800
+                                      pos: level
 
   - id: clean_if_needed
     mode: restart

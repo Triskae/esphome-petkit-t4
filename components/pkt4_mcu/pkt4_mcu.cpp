@@ -269,16 +269,12 @@ void PKT4MCUComponent::deinit() {
 	ESP_LOGW(TAG, "Deinited T4 MCU");
 }
 
-void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout) {
+void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout, uint8_t pos) {
 	struct __attribute__((packed)) {
 		uint8_t motor,
 		        mode,
-		        c1;
-
-		bool ignore_force :1,
-		     unk :1,
-		     report :1;
-		uint8_t c2 :5;
+		        c1,
+		        pos;  // stock logs it as pos/Dpos: destination at which the MCU itself stops the motor (0: none)
 
 		uint8_t direction,
 		        speed;
@@ -290,10 +286,7 @@ void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uin
 		.motor = motor,
 		.mode = mode,
 		.c1 = 0b0,
-		.ignore_force = false,
-		.unk = false,
-		.report = false,
-		.c2 = 0b0,
+		.pos = pos,
 		.direction = direction,
 		.speed = speed,
 		.duration = duration,
