@@ -298,6 +298,18 @@ pkt4_mcu:
 
 sensor:
   - platform: pkt4_mcu
+    # Motor status feedback (0x3), see docs/motion.md
+    drum_position:
+      name: Drum Position
+    drum_stop_code:
+      name: Drum Stop Code
+    drum_current:
+      name: Drum Current
+      disabled_by_default: yes
+    tray_position:
+      name: Tray Position
+    tray_stop_code:
+      name: Tray Stop Code
     distance:
       name: Distance
       entity_category: diagnostic

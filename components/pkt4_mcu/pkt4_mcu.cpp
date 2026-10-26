@@ -182,6 +182,38 @@ void PKT4MCUComponent::handle_packet_() {
 			}
 		}; break;
 
+		case 0x2:  // echo of the motor configuration; it may still be the previous one, so motor status (0x3) is authoritative
+			break;
+
+		case 0x3: {
+			struct __attribute__((packed)) p3 {
+				uint8_t result,  // 2: running, 3: stopped
+				        scram,   // stop cause (1: stop command, 4/5/…: MCU-side protection)
+				        act,
+				        speed,
+				        pos;     // 1 level, 3 dump, 5 smooth, 7 tray open, 9 tray closed; even values in between
+				uint16_t step,
+				         cur,
+				         cur_max,
+				         runtime;
+				uint8_t tag;
+			} *data = (struct p3*)node->data;
+
+			if (node->node > 1 || this->packet_.len != offsetof(MCUPacket, payload) + 1 + sizeof(p3) + sizeof(crc_in)) {
+				ESP_LOGW(TAG, "Invalid motor status: node %u, len %u", node->node, this->packet_.len);
+				break;
+			}
+			ESP_LOGD(TAG, "Motor %u: result=%u scram=%u pos=%u act=%u cur=%u/%u runtime=%u tag=%u", node->node,
+			         data->result, data->scram, data->pos, data->act, data->cur, data->cur_max, data->runtime, data->tag);
+
+			// A stopped status with no runtime only acknowledges a stop sent while already idle.
+			if (data->result != 2 && !data->runtime) break;
+			if (auto *s = this->motor_position_sensor_[node->node]) s->publish_state(data->pos);
+			if (auto *s = this->motor_current_sensor_[node->node]) s->publish_state(data->cur);
+			if (data->result != 2)
+				if (auto *s = this->motor_stop_code_sensor_[node->node]) s->publish_state(data->scram);
+		}; break;
+
 		case 0x9: {
 			switch (node->node) {
 				case 0x0: {

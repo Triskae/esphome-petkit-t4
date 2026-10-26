@@ -39,6 +39,10 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void set_drum_down_sensor(binary_sensor::BinarySensor *drum_down_sensor) { this->drum_down_sensor_ = drum_down_sensor; }
 		void set_drum_level_sensor(binary_sensor::BinarySensor *drum_level_sensor) { this->drum_level_sensor_ = drum_level_sensor; }
 		void set_tray_sensor(binary_sensor::BinarySensor *tray_sensor) { this->tray_sensor_ = tray_sensor; }
+		// Motor status (type 0x3) feedback, per motor: 0 = drum, 1 = tray.
+		void set_motor_position_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_position_sensor_[motor] = sensor; }
+		void set_motor_stop_code_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_stop_code_sensor_[motor] = sensor; }
+		void set_motor_current_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_current_sensor_[motor] = sensor; }
 
 		void init(void);
 		void deinit(void);
@@ -60,6 +64,9 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		sensor::Sensor *distance_sensor_{nullptr},
 		               *weight_sensor_{nullptr},
 		               *weight_sample_sensor_{nullptr};
+		sensor::Sensor *motor_position_sensor_[2]{},
+		               *motor_stop_code_sensor_[2]{},
+		               *motor_current_sensor_[2]{};
 		binary_sensor::BinarySensor *approach_sensor_{nullptr},
 		                            *bin_sensor_{nullptr},
 		                            *cover_sensor_{nullptr},

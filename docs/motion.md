@@ -64,11 +64,29 @@ Still to validate: pressing Level when already level, and several days of automa
 
 ## Stopping the drum when a pet is detected
 
+The scram mask bits appear to follow the stock sensor ids: bit 4 = `approached`, bit 6 = cover (`top_hall`), bits 12/13 = `prox_L`/`prox_R`. **The stock sender (`FUN_40127c90`) masks the value with `0xFFCF`, so bits 4 and 5 never reach the MCU**: bit 4 is an ESP-side flag only, used to classify a stop as `SCRAM - PROX`. On the MCU side, proximity protection comes from bits 12/13, which this component already sends permanently (`0x704C`).
+
 | | Stock firmware | This component |
 |---|---|---|
-| Who cuts the motor on proximity | **the MCU** (hardware scram) | **ESPHome**, on the `Approach` bit (`emergency_stop` script); same for `Pet Inside` (weight) |
-| Scram mask (`0xC` node 2) | changed per motion step: bits 12, 2, 3 at step start, **bit 4 (approach)** too unless two internal flags are set; bits 12/4 toggled during the step | fixed `0x704C` (bits 2, 3, 6, 12, 13, 14); **bit 4 never set** |
-| Stop cause | classified after a scram stop: 6 = `SCRAM - PROX`, 15 = pet present (weight), 7 = other, 4 = direct resume | unknown (motor statuses are not read) |
+| MCU-side proximity scram | bits 12/13, enabled at each step start and toggled during some phases | bits 12/13 always enabled (static `0x704C`) |
+| ESP-side stop | after the MCU stops, the cause is classified: 6 = `SCRAM - PROX` (internal bit 4 + proximity state), 15 = pet present (weight), 7 = other, 4 = direct resume | `emergency_stop` sends a stop on `Approach` and on `Pet Inside` (weight) |
+| Stop cause visible | yes (logged, classified) | yes since motor statuses are read: `Drum Stop Code` / `Tray Stop Code` in Home Assistant |
 | Resume | step suspended, then continued (`moto back work suspend/continue`) | `auto_clean` once `Approach` has been off for 5 s |
 
-Static analysis only (`FUN_4011e008`, `0x4011e270`, `0x4011e70d`, `0x4011e9f8`–`0x4011ec6c`). A MCU-side proximity stop would avoid the serial round trip, but enabling bit 4 and reading the resulting statuses still needs to be designed and tested with an object in front of the sensor, never with the pet.
+Static analysis: `FUN_4011e008` (`0x4011e270`, `0x4011e70d`, `0x4011e9f8`–`0x4011ec6c`), `FUN_40127c90`. **Observed on hardware (26 October 2026, hand in front of the entrance during a cleaning, pet kept away): the MCU already stops the drum by itself.** Its stopped status (`result=3`) arrives in the same millisecond as the `Approach` bit, ~140 ms before the stop sent by ESPHome (20:29:26.220 vs 20:29:26.359, and again at 20:29:34). The stop code is `1`, the same as for an end stop or a stop command, so `Drum Stop Code` alone cannot tell a proximity stop apart. The cleaning resumed once `Approach` had been off for 5 s and finished normally (dump `scram=0`, smooth, level `scram=0`). After such a stop the MCU reports position `0` (unknown) until the next hall sensor.
+
+### Known issue: resume command while passing level
+
+During the cleaning descent the drum passes the level sensor; its release runs `auto_clean`, which "resumes" the cleaning and sends a new `pos: dump` up command while the drum is still moving down. In both observed runs (19:39:20 and 20:30:50) the MCU ignored it and kept going down to smooth, but the firmware should not send it. To be fixed in the cleaning logic.
+
+## Motor status feedback in Home Assistant
+
+Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and logged at DEBUG (`Motor <n>: result=… scram=… pos=… cur=…`). Optional sensors of the `pkt4_mcu` sensor platform:
+
+| Sensor (YAML key) | Default entity | Value |
+|---|---|---|
+| `drum_position` / `tray_position` | `Drum Position`, `Tray Position` | position marker: 1 level, 3 dump, 5 smooth, 7 tray open, 9 tray closed; even values are in between |
+| `drum_stop_code` / `tray_stop_code` | `Drum Stop Code`, `Tray Stop Code` | `scram` of the last stopped status: 0 = destination reached, 1 = stop command / end stop; other values are MCU-side protections (4 and 5 observed, meanings partly unknown) |
+| `drum_current` / `tray_current` | `Drum Current` (disabled by default) | raw current, unit unknown (~400–550 while the drum turns) |
+
+Stopped statuses with zero runtime (acknowledgements of a stop sent while already idle) are ignored, so they do not overwrite the last real stop.

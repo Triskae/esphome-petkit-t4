@@ -77,7 +77,11 @@ Seven little-endian 16-bit words (`FUN_4012759c`):
 | type 1, node 0 | `{10,10,10}` (status subscription) | `buf_1` |
 | type 7, node 0 | `{5,10,10}` (weight config) | commented out |
 
-The **scram mask** is `0xF04C` for device types 12/13 and `0x704C` otherwise (bit 15 extra). The factory motor test only enables bits 2, 3, 13 and 14. The mapping from bits to `scram` codes in motor statuses is unknown, so do not change the mask.
+The **scram mask** is `0xF04C` for device types 12/13 and `0x704C` otherwise (bit 15 extra). The factory motor test only enables bits 2, 3, 13 and 14. Bits appear to follow the sensor ids (4 `approached`, 6 cover, 12/13 `prox_L`/`prox_R`). The sender applies `& 0xFFCF`, so **bits 4 and 5 never reach the MCU**; the stock motor task sets bit 4 only as an ESP-side flag (stop classified as `SCRAM - PROX`). The mapping from bits to `scram` codes in motor statuses is unknown, so do not change the mask.
+
+## Motor status (`0x03`)
+
+14 data bytes: `result, scram, act, speed, pos, step(u16), cur(u16), cur_max(u16), runtime(u16), ctrl_ID`. `result` 2 = running, 3 = stopped. This component parses it and publishes position, stop code and current per motor (see [motion.md](motion.md#motor-status-feedback-in-home-assistant)).
 
 **Weight cadence (confirmed):** the MCU delivers ~11.35 samples/s either way. Without the type 7 config it sends 10 samples per packet at ~1.13 packets/s; with `{5,10,10}` it sends 5 per packet at ~2.27 packets/s. The config lives in MCU RAM: an ESP OTA does not reset it, a power cycle does.
 

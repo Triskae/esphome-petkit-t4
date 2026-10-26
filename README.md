@@ -29,7 +29,7 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [ ] Pet weight saving
 * [ ] Multiple pets support
 * [ ] Extra unknown packets (all packet types sent by the MCU are now identified, see [docs/mcu-protocol.md](docs/mcu-protocol.md))
-* [ ] Better & more failsafe motor control (drum stops are now done by the MCU, see [Drum motion](#drum-motion); motor status feedback is not used yet)
+* [ ] Better & more failsafe motor control (drum stops are now done by the MCU and motor statuses are exposed to HA, see [Drum motion](#drum-motion); they do not drive retries yet)
 * [ ] Parametrized MCU init
 * [ ] Automated calibration
 * [ ] Dumping the stock calibration data from factory binaries (per-chip)
@@ -53,6 +53,10 @@ The drum is driven the way the stock firmware does it: each move carries a **des
 | Now | `pos: level`, stopped by the MCU; if already level, leveling just finishes | `pos: dump` → 3 s pause → `pos: smooth` → 1.5 s pause → `pos: level`, every stop by the MCU |
 
 The MCU UART is also read more robustly (2048-byte RX buffer, every buffered frame parsed each loop, resync on the frame magic); `RX bytes dropped` is shown in the component config dump. Details and hardware validation: [docs/motion.md](docs/motion.md).
+
+Motor statuses reported by the MCU are decoded and exposed as diagnostic sensors: `Drum Position` / `Tray Position` (position marker), `Drum Stop Code` / `Tray Stop Code` (why the motor stopped: destination, stop command, MCU-side protection) and `Drum Current` (raw, disabled by default). See [docs/motion.md](docs/motion.md#motor-status-feedback-in-home-assistant).
+
+When a pet is detected in front of the entrance, the MCU's own proximity protection (scram mask bits 12/13) stops the drum by itself (verified on hardware, ~140 ms before ESPHome's own stop on `Approach`); ESPHome also stops it on `Pet Inside` (weight) and resumes once `Approach` has been off for 5 s. Comparison with the stock behavior: [docs/motion.md](docs/motion.md#stopping-the-drum-when-a-pet-is-detected).
 
 
 ## Documentation
