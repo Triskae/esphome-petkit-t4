@@ -61,3 +61,14 @@ Leveling and cleaning rely on seeing hall edges and motor statuses. The UART RX 
 | 20:06–20:07 | cleaning `pos: dump` → 3 s → `pos: smooth` → 1.5 s → `pos: level` | every stop by the MCU, ~93 s, 0 RX bytes dropped |
 
 Still to validate: pressing Level when already level, and several days of automatic cleanings.
+
+## Stopping the drum when a pet is detected
+
+| | Stock firmware | This component |
+|---|---|---|
+| Who cuts the motor on proximity | **the MCU** (hardware scram) | **ESPHome**, on the `Approach` bit (`emergency_stop` script); same for `Pet Inside` (weight) |
+| Scram mask (`0xC` node 2) | changed per motion step: bits 12, 2, 3 at step start, **bit 4 (approach)** too unless two internal flags are set; bits 12/4 toggled during the step | fixed `0x704C` (bits 2, 3, 6, 12, 13, 14); **bit 4 never set** |
+| Stop cause | classified after a scram stop: 6 = `SCRAM - PROX`, 15 = pet present (weight), 7 = other, 4 = direct resume | unknown (motor statuses are not read) |
+| Resume | step suspended, then continued (`moto back work suspend/continue`) | `auto_clean` once `Approach` has been off for 5 s |
+
+Static analysis only (`FUN_4011e008`, `0x4011e270`, `0x4011e70d`, `0x4011e9f8`–`0x4011ec6c`). A MCU-side proximity stop would avoid the serial round trip, but enabling bit 4 and reading the resulting statuses still needs to be designed and tested with an object in front of the sensor, never with the pet.
