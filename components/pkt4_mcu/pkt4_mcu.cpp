@@ -116,11 +116,22 @@ void PKT4MCUComponent::loop() {
 			case 0x7: {
 				switch (node->node) {
 					case 0x0: {
+						const size_t header_size = offsetof(MCUPacket, payload) + 2 + sizeof(crc_in);
+						if (this->packet_.len < header_size ||
+						    this->packet_.len != header_size + size_t(node->data[0]) * sizeof(uint32_t)) {
+							ESP_LOGW(TAG, "Invalid weight packet length: %u", this->packet_.len);
+							if (this->weight_sample_sensor_) this->weight_sample_sensor_->publish_state(NAN);
+							break;
+						}
 						struct __attribute__((packed)) p7_0 {
 							uint8_t count;
 							uint32_t weight[];  // 24-bit
 						} *data = (struct p7_0*)node->data;
 
+						if (this->weight_sample_sensor_) {
+							for (uint8_t i = 0; i < data->count; i++)
+								this->weight_sample_sensor_->publish_state(data->weight[i]);
+						}
 						if (data->count) {
 							uint32_t weight = data->weight[0];
 							for (uint8_t i = 1; i < data->count; i++)
