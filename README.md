@@ -28,13 +28,38 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [x] Auto cleaning start (a.k.a. non-kitten mode)
 * [ ] Pet weight saving
 * [ ] Multiple pets support
-* [ ] Extra unknown packets
-* [ ] Better & more failsafe motor control
+* [ ] Extra unknown packets (all packet types sent by the MCU are now identified, see [docs/mcu-protocol.md](docs/mcu-protocol.md))
+* [ ] Better & more failsafe motor control (drum stops are now done by the MCU, see [Drum motion](#drum-motion); motor status feedback is not used yet)
 * [ ] Parametrized MCU init
 * [ ] Automated calibration
 * [ ] Dumping the stock calibration data from factory binaries (per-chip)
 * [x] Weight as additional safety check
 * [ ] Tune the timeouts and speeds
+
+
+## Drum motion
+
+The drum is driven the way the stock firmware does it: each move carries a **destination** (`pos`) and **the MCU stops the drum itself** when it reaches the matching hall sensor. Previously ESPHome started the drum without a destination and sent a stop when it saw the sensor; the latency let the drum overshoot the narrow level window and stop between positions, which left the litter box stuck with the leveling animation.
+
+| Destination (`pos:` of `pkt4_mcu.motor`) | Code | Used for |
+|---|---|---|
+| `level` | 1 | leveling, end of cleaning |
+| `dump` | 2 | cleaning, way up |
+| `smooth` | 3 | cleaning, way down |
+
+| | Leveling | Cleaning |
+|---|---|---|
+| Before | drum moved without destination, stopped by ESPHome on the `Drum Level` edge (overshoot) | up and down without destination, stopped by ESPHome on the `Drum Up` / `Drum Down` edges, no pause |
+| Now | `pos: level`, stopped by the MCU; if already level, leveling just finishes | `pos: dump` → 3 s pause → `pos: smooth` → 1.5 s pause → `pos: level`, every stop by the MCU |
+
+The MCU UART is also read more robustly (2048-byte RX buffer, every buffered frame parsed each loop, resync on the frame magic); `RX bytes dropped` is shown in the component config dump. Details and hardware validation: [docs/motion.md](docs/motion.md).
+
+
+## Documentation
+
+- [docs/motion.md](docs/motion.md): drum commands, destinations, before/after, hardware tests.
+- [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
+- [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md): diagnostic simulation of the stock weight reference rebasing.
 
 
 ## Weight Sensor Calibration
