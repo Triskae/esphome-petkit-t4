@@ -873,7 +873,11 @@ binary_sensor:
         - globals.set:
             id: level_needed
             value: 'false'
-        - script.execute: auto_clean
+        - if:
+            condition:  # while cleaning, level is only passed on the way down: don't "resume" (it would send the drum back up)
+              switch.is_off: clean
+            then:
+              script.execute: auto_clean
     tray:
       id: tray
       name: Tray

@@ -56,7 +56,7 @@ The MCU UART is also read more robustly (2048-byte RX buffer, every buffered fra
 
 Motor statuses reported by the MCU are decoded and exposed as diagnostic sensors: `Drum Position` / `Tray Position` (position marker), `Drum Stop Code` / `Tray Stop Code` (why the motor stopped: destination, stop command, MCU-side protection) and `Drum Current` (raw, disabled by default). See [docs/motion.md](docs/motion.md#motor-status-feedback-in-home-assistant).
 
-When a pet is detected in front of the entrance, the MCU's own proximity protection (scram mask bits 12/13) stops the drum by itself (verified on hardware, ~140 ms before ESPHome's own stop on `Approach`); ESPHome also stops it on `Pet Inside` (weight) and resumes once `Approach` has been off for 5 s. Comparison with the stock behavior: [docs/motion.md](docs/motion.md#stopping-the-drum-when-a-pet-is-detected).
+When a pet is detected in front of the entrance, the MCU's own proximity protection (scram mask bits 12/13) stops the drum by itself (verified on hardware, ~140 ms before ESPHome's own stop on `Approach`); ESPHome also stops it on `Pet Inside` (weight) and resumes once `Approach` has been off for 5 s. Passing the level sensor during a cleaning no longer triggers a spurious "resume" ([details](docs/motion.md#fixed-resume-command-while-passing-level)). Comparison with the stock behavior: [docs/motion.md](docs/motion.md#stopping-the-drum-when-a-pet-is-detected).
 
 
 ## Documentation

@@ -66,8 +66,8 @@ async def pkt4_mcu_deinit_to_code(config, action_id, template_arg, args):
 	cv.Optional(CONF_SPEED): cv.positive_not_null_int,
 	cv.Optional(CONF_DURATION): cv.positive_int,
 	cv.Optional(CONF_TIMEOUT): cv.positive_int,
-	# Destination at which the MCU stops the drum itself (stock codes). 'level' is confirmed on hardware;
-	# pos=2 sent at dump completed at once, so 2 is dump and 3 smooth (matches the stock factory test).
+	# Destination at which the MCU stops the drum itself (stock codes).
+	# Confirmed on hardware: the MCU stops at each with scram=0 (2 sent at dump completes at once).
 	cv.Optional(CONF_POS, default='none'): cv.enum({'none': 0, 'level': 1, 'dump': 2, 'smooth': 3}),
 }), cv.vol.truth(lambda conf: all(bool((i in conf) ^ (conf[CONF_MODE] == 'stop')) for i in (CONF_SPEED, CONF_TIMEOUT)) and (conf[CONF_MODE] != 'sense' or CONF_DURATION in conf) and (conf[CONF_MODE] != 'stop' or CONF_DIRECTION not in conf or conf[CONF_DIRECTION] == 'stop'))), synchronous=True) #, msg="This mode doesn't support the passed combination of parameters."))
 async def pkt4_mcu_motor_to_code(config, action_id, template_arg, args):

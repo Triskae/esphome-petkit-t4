@@ -19,7 +19,7 @@ Drum destinations (`pkt4_mcu.motor` option `pos:`):
 |---|---|---|---|
 | `level` | 1 | confirmed | MCU stops at status position 1 with `result=3, scram=0` (4 runs) |
 | `dump` | 2 | confirmed | stop at position 3 with `scram=0`; a command sent while already at dump completes instantly |
-| `smooth` | 3 | probable | stops at position 5 without stopping at level on the way; smooth is also an end stop (`scram=1` with or without destination) |
+| `smooth` | 3 | confirmed | stops at position 5 with `scram=0` once the spurious resume command was removed (20:38:35); before, the ignored up command turned it into `scram=1` |
 
 Status positions reported by `0x03`: 1 level, 3 dump, 5 smooth (even values are in between), 7 tray open, 9 tray closed.
 
@@ -59,6 +59,8 @@ Leveling and cleaning rely on seeing hall edges and motor statuses. The UART RX 
 | 19:38–19:39 | cleaning (no destination) + leveling `pos: level` | final stop at level by the MCU |
 | 20:02 | cleaning with dump/smooth codes swapped | descent command completed at once at dump: codes corrected |
 | 20:06–20:07 | cleaning `pos: dump` → 3 s → `pos: smooth` → 1.5 s → `pos: level` | every stop by the MCU, ~93 s, 0 RX bytes dropped |
+| 20:29–20:31 | cleaning with a hand in front of the entrance during the way up | MCU stops the drum by itself on proximity; resume after 5 s; cleaning finished |
+| 20:37–20:38 | cleaning after the resume fix | no command when passing level; dump, smooth and level all reached with `scram=0` |
 
 Still to validate: pressing Level when already level, and several days of automatic cleanings.
 
@@ -75,9 +77,9 @@ The scram mask bits appear to follow the stock sensor ids: bit 4 = `approached`,
 
 Static analysis: `FUN_4011e008` (`0x4011e270`, `0x4011e70d`, `0x4011e9f8`–`0x4011ec6c`), `FUN_40127c90`. **Observed on hardware (26 October 2026, hand in front of the entrance during a cleaning, pet kept away): the MCU already stops the drum by itself.** Its stopped status (`result=3`) arrives in the same millisecond as the `Approach` bit, ~140 ms before the stop sent by ESPHome (20:29:26.220 vs 20:29:26.359, and again at 20:29:34). The stop code is `1`, the same as for an end stop or a stop command, so `Drum Stop Code` alone cannot tell a proximity stop apart. The cleaning resumed once `Approach` had been off for 5 s and finished normally (dump `scram=0`, smooth, level `scram=0`). After such a stop the MCU reports position `0` (unknown) until the next hall sensor.
 
-### Known issue: resume command while passing level
+### Fixed: resume command while passing level
 
-During the cleaning descent the drum passes the level sensor; its release runs `auto_clean`, which "resumes" the cleaning and sends a new `pos: dump` up command while the drum is still moving down. In both observed runs (19:39:20 and 20:30:50) the MCU ignored it and kept going down to smooth, but the firmware should not send it. To be fixed in the cleaning logic.
+During the cleaning descent the drum passes the level sensor. Its release used to run `auto_clean`, which "resumed" the cleaning and sent a new `pos: dump` up command while the drum was still moving down. In both observed runs (19:39:20 and 20:30:50 on 26 October 2026) the MCU ignored it and kept going to smooth. The `Drum Level` release now runs `auto_clean` only when no cleaning is in progress; resuming an interrupted cleaning still happens on `Approach` / `Pet Inside` release. Verified at 20:38:27: no command when passing level, and the smooth stop now ends with `scram=0`.
 
 ## Motor status feedback in Home Assistant
 
