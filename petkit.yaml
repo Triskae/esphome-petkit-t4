@@ -788,6 +788,7 @@ binary_sensor:
         - globals.set:
             id: level_needed
             value: 'true'
+        - delay: 3s  # stock pauses at dump to let the waste fall
         - script.execute: level_if_needed
     drum_down:
       id: drum_down
@@ -811,6 +812,7 @@ binary_sensor:
         - globals.set:
             id: level_needed
             value: 'true'
+        - delay: 1500ms  # stock pauses at smooth before returning to level
         - script.execute: level_if_needed
     drum_level:
       id: drum_level
@@ -1073,6 +1075,7 @@ switch:
                   speed: 100
                   mode: time
                   timeout: 1000
+                  pos: dump  # the MCU stops at the dump sensor itself, as stock does
         else:
           - delay: 0s  # yield
           - switch.turn_off: clean
@@ -1437,6 +1440,7 @@ script:
                                   speed: 100
                                   mode: time
                                   timeout: 1000
+                                  pos: smooth  # the MCU stops at the smooth sensor itself, as stock does
                               else:
                                 pkt4_mcu.motor:
                                   motor: drum
