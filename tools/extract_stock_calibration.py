@@ -4,6 +4,9 @@
 No fixed flash size, partition address, entry index or source hash. Supports
 legacy and indexed NVS blobs. Unknown or inconsistent formats are rejected.
 References: ESP-IDF components/nvs_flash/src/nvs_types.hpp and nvs_page.hpp.
+
+Disclaimer: the firmware does not use these values yet (only the shadow diagnostics
+carry them as constants); see docs/stock-calibration.md.
 """
 import argparse
 from dataclasses import dataclass

@@ -33,6 +33,7 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [ ] Parametrized MCU init
 * [ ] Automated calibration
 * [x] Dumping the stock calibration data from factory binaries (per-chip): [`tools/extract_stock_calibration.py`](tools/extract_stock_calibration.py), see [docs/stock-calibration.md](docs/stock-calibration.md)
+  * [ ] Use the extracted values for the weight (stock two-range conversion; validate with known masses before replacing the current calibration). Not used yet
 * [x] Weight as additional safety check
 * [x] Drum and flap moves stopped by the MCU at stock destinations (no more overshoot or stuck leveling screen), see [docs/motion.md](docs/motion.md)
 * [x] Robust MCU UART reading (no lost frames during motion)
@@ -62,7 +63,6 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Weekly MCU reboot (stock, packet `0xA`)
   * [ ] Identify stock settings `0x12`, `0x23` and `3`, and the remaining stop codes (`4`; `5` = stall and `18` = close timeout are known)
 * [ ] Weight:
-  * [ ] Use the stock two-range calibration for the weight (import it from the dump, validate with known masses; see [docs/stock-calibration.md](docs/stock-calibration.md))
   * [ ] Weight reference rebasing like stock (now only simulated by the shadow sensors), with the deposit measured when the pet leaves, before the reference absorbs it (see [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md))
   * [ ] Residual weight sits around -15 to -22 g after cleanings
   * [ ] Detect the waste bin removal (not reported on T4-MAIN-V2.3; `Bin Emptied` button meanwhile)

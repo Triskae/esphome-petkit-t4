@@ -1,5 +1,7 @@
 # Stock weight calibration
 
+> **Disclaimer:** the extracted values are not used by the firmware yet. `Weight` still relies on the component's own calibration; only the shadow diagnostics carry the stock values as constants. Using them is in the todo list.
+
 Each T4 is calibrated at the factory. The stock firmware keeps that calibration in the NVS partition `user_calibrt`, namespace `T4`, key `data`: a 20-byte blob of five little-endian 32-bit integers.
 
 | Field | Meaning | Example (T4-MAIN-V2.3) |
