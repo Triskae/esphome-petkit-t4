@@ -49,7 +49,8 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Minimum interval between two cleanings
   * [ ] Do-not-disturb hours
   * [ ] Stock minimum pet weight of 1.5 kg (`Pet Threshold`, 1 kg, is used instead)
-* [ ] Stock motion details not ported yet (see [docs/motion.md](docs/motion.md)):
+* [ ] Stock motion (see [docs/motion.md](docs/motion.md)):
+  * [x] Moves sent the stock way: every drum and flap move carries a stock MCU destination (level / dump / smooth, open / closed) and the MCU stops it itself; cleaning, leveling and maintenance follow the stock recipes
   * [ ] React to a move that ends without reaching its destination (stop on timeout or stall): retry with the remaining budget, then report an error, as stock does
   * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
   * [ ] Detect a failed flap opening (only a failed close is detected)
