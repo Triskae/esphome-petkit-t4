@@ -92,6 +92,50 @@ After a visit, `clean_if_needed` waits `Clean After` and then turns `Clean` on. 
 
 `Clean Pending` stays on while waiting. The stock firmware never drops the request either (it suspends it, or starts and lets the step protection pause the drum), but it does not restart the countdown when a pet only passes in front; this variant is deliberately more conservative.
 
+## Maintenance: before / after
+
+Stock recipe 9 (`FUN_4011d998`, branch `0x4011dfaf`): make sure the waste flap is closed (`FUN_4011ccd8`), align the drum if it isn't at a known position (`FUN_4011cc10`), then a **relative** drum move (type 1) up with dump as limit, step 1000, speed 100, overtime 800, followed by a 900 s wait step.
+
+| | Before | After |
+|---|---|---|
+| Waste flap | **opened** first | **closed** first if it isn't (as stock); maintenance is cancelled if it doesn't close within 10 s |
+| Drum move | type 3, no destination, up, timeout 120 | type 1 (`mode: sense`), up, `duration: 1000`, `pos: dump`, timeout 800 |
+| Alignment | — | not needed: maintenance still only starts from level |
+| Leveling while in maintenance | could open the flap and move the drum (`level_if_needed` had no maintenance check) | `level_if_needed` does nothing while maintenance is on |
+| Exit | stop, update litter mass, level | unchanged |
+
+With the flap closed, maintenance never drops anything into the waste bin, so it stays allowed when `Tray Full` is on.
+
+Not ported: the 900 s wait step (its release conditions are unknown, so maintenance still lasts until it is turned off) and the stock exit path.
+
+## Who stops the motors
+
+Every ordinary move now carries a destination, so the MCU stops it itself; ESPHome no longer sends a stop when it sees a hall sensor.
+
+| Move | Destination | Stop sent by ESPHome before | Now |
+|---|---|---|---|
+| Cleaning, leveling | `dump` / `smooth` / `level` | on `Drum Up` press, `Drum Down` press and `Drum Level` release (after the MCU's own stop) | none |
+| Manual `Drum Up` / `Drum Down` switches | none, timeout 1000 | on the next hall sensor | `pos: dump` / `pos: smooth`, timeout 800; the switch is turned off (state only) when the position is reached |
+| Waste flap open / close | none | on every `Tray` change | `pos: open` (4) / `pos: closed` (5), stock builder codes (`FUN_4011cc9c`) |
+
+Stops are still sent where they are needed: `Approach` / `Pet Inside` (`emergency_stop`), cover opened, bin removed, `Block Movement`, OTA, and turning off `Clean`, `Maintenance` or a manual switch.
+
+The flap destinations come from the stock builder and production test, and are confirmed on hardware: the MCU stops at position 7 / 9 with stop code 0 (see below).
+
+## Fixed: Block Movement
+
+The guard in `level_if_needed` and `clean_if_needed` was a list of conditions, which ESPHome ANDs: moves were only blocked during an OTA **and** with `Block Movement` on. The guard is now "OTA in progress **or** `Block Movement`" (substitution `movement_blocked`), checked by those scripts and by every command that starts a move: `Clean`, `Maintenance`, `Tray`, `Drum Up`, `Drum Down`. The conditions read the states directly; the `Movement Blocked` diagnostic sensor only shows it in Home Assistant (reading the sensor itself made the leveling requested when `Block Movement` is turned off see a stale "blocked" and do nothing).
+
+### Hardware validation (27 October 2026, 23:28–23:36)
+
+| Test | Result |
+|---|---|
+| `Tray` on | open with `pos: open`: the MCU stops at position 7, stop code 0; `level_if_needed` then closes it with `pos: closed`: position 9, stop code 0 |
+| `Maintenance` on (flap already closed) | type 1, pos 2, up, speed 100, step 1000, overtime 800: the drum turns up for 10.0 s (step unit ≈ 10 ms) and stops at position 2 (between level and dump), stop code 0 |
+| `Maintenance` off | flap opens (7, code 0), drum back to level in 8.1 s (1, code 0), flap closes (9, code 0) |
+| `Block Movement` on, then `Level` and `Tray` | no motor command sent |
+| `Block Movement` off | the pending leveling runs (flap open/close, drum already level) |
+
 ## Motor status feedback in Home Assistant
 
 Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and logged at DEBUG (`Motor <n>: result=… scram=… pos=… cur=…`). Optional sensors of the `pkt4_mcu` sensor platform:

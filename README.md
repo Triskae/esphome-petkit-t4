@@ -56,6 +56,8 @@ The drum is driven the way the stock firmware does it: each move carries a **des
 | Before | drum moved without destination, stopped by ESPHome on the `Drum Level` edge (overshoot) | up and down without destination, stopped by ESPHome on the `Drum Up` / `Drum Down` edges, no pause |
 | Now | `pos: level`, stopped by the MCU; if already level, leveling just finishes | `pos: dump` → 3 s pause → `pos: smooth` → 1.5 s pause → `pos: level`, every stop by the MCU |
 
+Every ordinary move (cleaning, leveling, manual `Drum Up` / `Drum Down`, waste flap) carries a destination, so ESPHome no longer stops the motors on hall sensors; it only sends stops for safety (pet, cover, bin, `Block Movement`, OTA) or when a command is turned off ([details](docs/motion.md#who-stops-the-motors)). Maintenance follows the stock recipe: flap closed, then a relative move up ([details](docs/motion.md#maintenance-before--after)). `Block Movement` now blocks every move on its own ([details](docs/motion.md#fixed-block-movement)).
+
 The MCU UART is also read more robustly (2048-byte RX buffer, every buffered frame parsed each loop, resync on the frame magic); `RX bytes dropped` is shown in the component config dump. Details and hardware validation: [docs/motion.md](docs/motion.md).
 
 Motor statuses reported by the MCU are decoded and exposed as diagnostic sensors: `Drum Position` / `Tray Position` (position marker), `Drum Stop Code` / `Tray Stop Code` (why the motor stopped: destination, stop command, MCU-side protection) and `Drum Current` (raw, disabled by default). See [docs/motion.md](docs/motion.md#motor-status-feedback-in-home-assistant).

@@ -122,6 +122,9 @@ substitutions:
   ap_ssid: !secret ap_ssid
   ap_password: !secret ap_password
   # Extracted from this device's stock dump; diagnostic counters only.
+  # Any move is forbidden during an OTA or with Block Movement on. Read the states directly: the
+  # Movement Blocked sensor may not be refreshed yet when Block Movement's own triggers run.
+  movement_blocked: 'id(ota_state) || id(block_movement).state'
   shadow_stock_zero: '7217189'
   shadow_stock_midpoint: '6557189'
   shadow_stock_low_slope: '66'
@@ -763,6 +766,7 @@ binary_sensor:
                 speed: 50
                 mode: time
                 timeout: 80
+                pos: open
       on_release:
         - delay: 5s
         - if:
@@ -802,13 +806,13 @@ binary_sensor:
       id: drum_up
       name: Drum Up
       entity_category: diagnostic
-      on_press:
-        - pkt4_mcu.motor:
-            motor: drum
-            mode: stop
-        - switch.turn_off: motor_drum_up # XXX
+      on_press:  # the MCU stops at dump itself (pos: dump)
+        - switch.template.publish:
+            id: motor_drum_up
+            state: OFF
         - if:
             all:
+              - switch.is_on: clean  # only a cleaning dumps waste
               - binary_sensor.is_off: pet_inside
               - binary_sensor.is_off: cover
             then:
@@ -827,11 +831,10 @@ binary_sensor:
       id: drum_down
       name: Drum Down
       entity_category: diagnostic
-      on_press:
-        - pkt4_mcu.motor:
-            motor: drum
-            mode: stop
-        - switch.turn_off: motor_drum_down # XXX
+      on_press:  # the MCU stops at smooth itself (pos: smooth)
+        - switch.template.publish:
+            id: motor_drum_down
+            state: OFF
         - if:
             condition:
               switch.is_on: clean
@@ -867,18 +870,14 @@ binary_sensor:
                 speed: 100
                 mode: time
                 timeout: 80
+                pos: open
               # TODO: stop if opening failed
       on_release:
         - if:
             all:
               - switch.is_off: clean
               - switch.is_off: maintenance
-            then:
-              - pkt4_mcu.motor:
-                  motor: drum
-                  mode: stop
-              - switch.turn_off: motor_drum_up # XXX
-              - switch.turn_off: motor_drum_down # XXX
+            then:  # the MCU stops at level itself (pos: level)
               - if:
                   all:
                     - binary_sensor.is_off: cover
@@ -891,6 +890,7 @@ binary_sensor:
                       speed: 5
                       mode: time
                       timeout: 80
+                      pos: closed
         - globals.set:
             id: level_needed
             value: 'false'
@@ -905,24 +905,14 @@ binary_sensor:
       entity_category: diagnostic
       disabled_by_default: yes
       trigger_on_initial_state: yes
-      on_state:
-        pkt4_mcu.motor:
-          motor: tray
-          mode: stop
-      on_press:
+      on_press:  # open: tray moves now carry a destination, so the MCU stops the tray itself
         if:
           condition:
             switch.is_on: clean
           then:
             switch.turn_on: clean  # restart
           else:
-            if:
-              condition:
-                switch.is_on: maintenance
-              then:
-                switch.turn_on: maintenance  # restart
-              else:
-                script.execute: level_if_needed
+            script.execute: level_if_needed
       on_release:
         script.execute: level_if_needed
 
@@ -969,6 +959,13 @@ binary_sensor:
     device_class: problem
     entity_category: diagnostic
     lambda: return id(bin_full) || id(waste_collected) >= id(tray_capacity).state;
+
+  - platform: template
+    id: movement_blocked
+    name: Movement Blocked
+    icon: mdi:lock
+    entity_category: diagnostic
+    lambda: return ${movement_blocked};
 
   - platform: template
     name: Level Needed
@@ -1117,6 +1114,7 @@ switch:
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: bin
           - binary_sensor.is_off: drum_up
+          - lambda: return !(${movement_blocked});
           - lambda: return id(clean).state || !id(tray_full).state;  # never start dumping into a full bin, even manually; a running clean may still resume
         then:
           if:
@@ -1131,6 +1129,7 @@ switch:
                 speed: 100
                 mode: time
                 timeout: 80
+                pos: open
             else:
               - script.stop: clean_if_needed
               - globals.set:
@@ -1160,6 +1159,7 @@ switch:
               speed: 5
               mode: time
               timeout: 80
+              pos: closed
     on_turn_off:
       globals.set:
         id: cleaned_at
@@ -1171,33 +1171,46 @@ switch:
     icon: mdi:progress-wrench
     optimistic: yes
     restore_mode: disabled
-    turn_on_action:
+    turn_on_action:  # stock recipe 9: close the flap, then a relative move up toward dump
       if:
         all:
           - switch.is_off: clean
+          - lambda: return !(${movement_blocked});
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: bin
           - binary_sensor.is_off: drum_up
-          - binary_sensor.is_off: drum_level
+          - binary_sensor.is_off: drum_level  # starts from level, so stock's alignment step isn't needed
         then:
-          if:
-            condition:
-              not:
-                binary_sensor.is_on: tray
-            then:
-              pkt4_mcu.motor:
-                motor: tray
-                direction: open
-                speed: 100
-                mode: time
-                timeout: 80
-            else:
-              pkt4_mcu.motor:
-                motor: drum
-                direction: up
-                speed: 100
-                mode: time
-                timeout: 120
+          - if:
+              condition:
+                not:
+                  binary_sensor.is_off: tray
+              then:
+                - pkt4_mcu.motor:
+                    motor: tray
+                    direction: close
+                    speed: 100
+                    mode: time
+                    timeout: 80
+                    pos: closed
+                - wait_until:
+                    condition:
+                      binary_sensor.is_off: tray
+                    timeout: 10s
+          - if:
+              condition:
+                binary_sensor.is_off: tray
+              then:
+                pkt4_mcu.motor:
+                  motor: drum
+                  direction: up
+                  speed: 100
+                  mode: sense  # type 1: relative move by `duration` steps
+                  duration: 1000
+                  timeout: 800
+                  pos: dump
+              else:
+                switch.turn_off: maintenance
         else:
           - delay: 0s  # yield
           - switch.turn_off: maintenance
@@ -1262,8 +1275,9 @@ switch:
     lambda: return id(tray).state;
     turn_on_action:
       if:
-        condition:
-          binary_sensor.is_off: cover
+        all:
+          - binary_sensor.is_off: cover
+          - lambda: return !(${movement_blocked});
         then:
           pkt4_mcu.motor:
             motor: tray
@@ -1271,11 +1285,13 @@ switch:
             speed: 100
             mode: time
             timeout: 80
+            pos: open
     turn_off_action:
       if:
         all:
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
         then:
           pkt4_mcu.motor:
             motor: tray
@@ -1283,6 +1299,7 @@ switch:
             speed: 100
             mode: time
             timeout: 80
+            pos: closed
 
   - platform: template
     id: motor_drum_down
@@ -1299,13 +1316,15 @@ switch:
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: drum_down
           - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
         then:
           pkt4_mcu.motor:
             motor: drum
             direction: down
             speed: 100
             mode: time
-            timeout: 1000
+            timeout: 800
+            pos: smooth  # goes to smooth; the MCU stops there itself
         else:
           - delay: 0s  # yield
           - switch.turn_off: motor_drum_down
@@ -1329,13 +1348,15 @@ switch:
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: drum_up
           - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
         then:
           pkt4_mcu.motor:
             motor: drum
             direction: up
             speed: 100
             mode: time
-            timeout: 1000
+            timeout: 800
+            pos: dump  # goes to dump; the MCU stops there itself
         else:
           - delay: 0s  # yield
           - switch.turn_off: motor_drum_up
@@ -1451,9 +1472,9 @@ script:
     then:
       - delay: 0s  # yield
       - if:
-          condition:
-            - lambda: return id(ota_state);
-            - switch.is_on: block_movement
+          any:  # maintenance keeps the drum where it is until it's turned off
+            - lambda: return ${movement_blocked};
+            - switch.is_on: maintenance
           then:
             - script.stop: level_if_needed
       - if:
@@ -1469,6 +1490,7 @@ script:
               speed: 100
               mode: time
               timeout: 80
+              pos: open
           else:
             if:
               all:
@@ -1486,6 +1508,7 @@ script:
                   speed: 5
                   mode: time
                   timeout: 80
+                  pos: closed
               else:
                 if:
                   any:
@@ -1537,6 +1560,7 @@ script:
                                     speed: 5
                                     mode: time
                                     timeout: 80
+                                    pos: closed
                               else:
                                 if:
                                   condition:
@@ -1568,8 +1592,7 @@ script:
             - binary_sensor.is_off: pet_inside
       - if:
           condition:
-            - lambda: return id(ota_state);
-            - switch.is_on: block_movement
+            lambda: return ${movement_blocked};
           then:
             - script.stop: clean_if_needed
       - if:
