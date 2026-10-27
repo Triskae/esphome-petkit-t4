@@ -29,10 +29,10 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [ ] Pet weight saving
 * [ ] Multiple pets support
 * [x] Extra unknown packets (all packet types sent by the MCU are identified, see [docs/mcu-protocol.md](docs/mcu-protocol.md); motor statuses are decoded and exposed to HA)
-* [ ] Better & more failsafe motor control (every drum and flap stop is now done by the MCU, motor statuses are exposed to HA and a failed flap close is detected, see [Drum motion](#drum-motion); they do not drive retries yet)
+* [x] Better & more failsafe motor control (every drum and flap stop is done by the MCU, motor statuses are exposed to HA and a failed flap close is detected, see [Drum motion](#drum-motion); reacting to other failed moves is below)
 * [ ] Parametrized MCU init
 * [ ] Automated calibration
-* [ ] Dumping the stock calibration data from factory binaries (per-chip)
+* [x] Dumping the stock calibration data from factory binaries (per-chip): [`tools/extract_stock_calibration.py`](tools/extract_stock_calibration.py), see [docs/stock-calibration.md](docs/stock-calibration.md)
 * [x] Weight as additional safety check
 * [x] Drum and flap moves stopped by the MCU at stock destinations (no more overshoot or stuck leveling screen), see [docs/motion.md](docs/motion.md)
 * [x] Robust MCU UART reading (no lost frames during motion)
@@ -49,6 +49,7 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Do-not-disturb hours
   * [ ] Stock minimum pet weight of 1.5 kg (`Pet Threshold`, 1 kg, is used instead)
 * [ ] Stock motion details not ported yet (see [docs/motion.md](docs/motion.md)):
+  * [ ] React to a move that ends without reaching its destination (stop on timeout or stall): retry with the remaining budget, then report an error, as stock does
   * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
   * [ ] Detect a failed flap opening (only a failed close is detected)
   * [ ] Leveling: 0.5 s pauses, final 30-step move, and the swing via smooth even when already level
@@ -61,6 +62,7 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Weekly MCU reboot (stock, packet `0xA`)
   * [ ] Identify stock settings `0x12`, `0x23` and `3`, and the remaining stop codes (`4`; `5` = stall and `18` = close timeout are known)
 * [ ] Weight:
+  * [ ] Use the stock two-range calibration for the weight (import it from the dump, validate with known masses; see [docs/stock-calibration.md](docs/stock-calibration.md))
   * [ ] Weight reference rebasing like stock (now only simulated by the shadow sensors), with the deposit measured when the pet leaves, before the reference absorbs it (see [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md))
   * [ ] Residual weight sits around -15 to -22 g after cleanings
   * [ ] Detect the waste bin removal (not reported on T4-MAIN-V2.3; `Bin Emptied` button meanwhile)
@@ -101,6 +103,7 @@ A full waste bin is detected like the stock firmware does, when the waste flap f
 - [docs/cleaning.md](docs/cleaning.md): automatic cleaning decision, comparison with the stock firmware.
 - [docs/motion.md](docs/motion.md): drum commands, destinations, before/after, hardware tests.
 - [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
+- [docs/stock-calibration.md](docs/stock-calibration.md): factory weight calibration and the tool that extracts it from a stock flash dump.
 - [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md): diagnostic simulation of the stock weight reference rebasing.
 
 
