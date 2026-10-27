@@ -81,6 +81,17 @@ Static analysis: `FUN_4011e008` (`0x4011e270`, `0x4011e70d`, `0x4011e9f8`–`0x4
 
 During the cleaning descent the drum passes the level sensor. Its release used to run `auto_clean`, which "resumed" the cleaning and sent a new `pos: dump` up command while the drum was still moving down. In both observed runs (19:39:20 and 20:30:50 on 26 October 2026) the MCU ignored it and kept going to smooth. The `Drum Level` release now runs `auto_clean` only when no cleaning is in progress; resuming an interrupted cleaning still happens on `Approach` / `Pet Inside` release. Verified at 20:38:27: no command when passing level, and the smooth stop now ends with `scram=0`.
 
+### Fixed: pending clean dropped when a pet is in front
+
+After a visit, `clean_if_needed` waits `Clean After` and then turns `Clean` on. `Clean` refuses to start while `Approach` is on, and nothing retried it: on 27 October 2026 at 04:42:19 a 77 g deposit was left because the cat was in front of the entrance (04:42:05–04:42:23) exactly when the one-minute delay ended. It was only cleaned after the next visit.
+
+| | Before | Now |
+|---|---|---|
+| `Approach` released while a clean is pending | `auto_clean` (nothing, the pending clean already used `cleans_left`) | the delay restarts: the clean starts a full `Clean After` after the pet was last seen |
+| Pet in front or inside when the delay ends | clean refused or skipped, never retried | waits until `Approach` and `Pet Inside` are off, then runs the usual checks |
+
+`Clean Pending` stays on while waiting. The stock firmware never drops the request either (it suspends it, or starts and lets the step protection pause the drum), but it does not restart the countdown when a pet only passes in front; this variant is deliberately more conservative.
+
 ## Motor status feedback in Home Assistant
 
 Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and logged at DEBUG (`Motor <n>: result=… scram=… pos=… cur=…`). Optional sensors of the `pkt4_mcu` sensor platform:

@@ -722,7 +722,13 @@ binary_sensor:
           then:
             script.execute: emergency_stop
       on_release:
-        script.execute: auto_clean
+        if:
+          condition:  # a clean is pending: restart its delay, so it starts a full delay after the pet was last seen
+            script.is_running: clean_if_needed
+          then:
+            script.execute: clean_if_needed
+          else:
+            script.execute: auto_clean
     bin:
       id: bin
       name: Bin
@@ -1503,6 +1509,10 @@ script:
     mode: restart
     then:
       - delay: !lambda return id(clean_after).state*60000;
+      - wait_until:  # don't drop the clean if a pet is still around when the delay ends
+          all:
+            - binary_sensor.is_off: approach
+            - binary_sensor.is_off: pet_inside
       - if:
           condition:
             - lambda: return id(ota_state);
