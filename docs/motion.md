@@ -32,6 +32,25 @@ Status positions reported by `0x03`: 1 level, 3 dump, 5 smooth (even values are 
 | Observed stop | overshoot by 1–1.5 s, or stop between positions on overtime, then no further trigger: stuck | MCU stops ~25 ms after reaching position 1 |
 | Already level | down then back up | the MCU does not move; leveling is finished and the tray is closed |
 | During cleaning | — | unchanged (see below) |
+| From the dump side | straight down to level | via smooth, as stock: see [Leveling via smooth](#leveling-via-smooth) |
+
+### Leveling via smooth
+
+Positions and actions are different things: **level**, **dump** and **smooth** are the drum's three hall positions (1, 3, 5); **leveling** is the action of bringing the drum back to level. Smooth is on the other side of level from dump: going past level to smooth lets the litter fall back and spreads it.
+
+Stock leveling (`FUN_4011ceb8`, also run when maintenance is left with OK, process 3) goes to smooth (type 3, pos 3, down), pauses 0.5 s, comes back up to level, pauses 0.5 s, then makes a small final move (step 30). When the drum is on the smooth side it goes up to level directly.
+
+| Start | Before | Now |
+|---|---|---|
+| Dump side (after maintenance, `Level`, boot, an interrupted move) | `pos: level`, down | `pos: smooth`, down past level; at smooth, 1.5 s pause then `pos: level`, up (the same `Drum Down` handler as the cleaning) |
+| Smooth side | `pos: level`, up | unchanged |
+| Already level | no move | unchanged (stock would also swing to smooth and back) |
+
+Passing level on the way to smooth is not the end of the leveling: a `smoothing` flag makes the `Drum Level` release skip closing the flap and `auto_clean` that one time; it is also cleared at smooth and by `emergency_stop`.
+
+Not ported: the 0.5 s pauses (the shared handler pauses 1.5 s, as for the cleaning) and the final 30-step move.
+
+Validated on hardware (28 October 2026, 23:58–23:59, `Maintenance` off from the maintenance position): flap open (7, code 0), drum down with `pos: smooth`, level passed at 23:59:02.9 with no command sent, stop at smooth (5, code 0) after 17.2 s, 2 s later `pos: level` up, stop at level (1, code 0) after 5.7 s, flap closed (9, code 0).
 
 ## Cleaning: before / after
 
@@ -102,7 +121,7 @@ Stock recipe 9 (`FUN_4011d998`, branch `0x4011dfaf`): make sure the waste flap i
 | Drum move | type 3, no destination, up, timeout 120 | type 1 (`mode: sense`), up, `duration: 1000`, `pos: dump`, timeout 800 |
 | Alignment | — | not needed: maintenance still only starts from level |
 | Leveling while in maintenance | could open the flap and move the drum (`level_if_needed` had no maintenance check) | `level_if_needed` does nothing while maintenance is on |
-| Exit | stop, update litter mass, level | unchanged |
+| Exit | stop, update litter mass, level | stop, update litter mass, level [via smooth](#leveling-via-smooth), as stock's exit (process 3) |
 
 With the flap closed, maintenance never drops anything into the waste bin, so it stays allowed when `Tray Full` is on.
 

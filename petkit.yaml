@@ -289,6 +289,9 @@ globals:
   - id: visit_clean
     type: bool
 
+  - id: smoothing  # a plain leveling is on its way to smooth: passing level isn't its end
+    type: bool
+
   - id: bin_full  # the waste flap failed to close: cleared only by emptying the bin
     type: bool
     restore_value: yes
@@ -835,6 +838,9 @@ binary_sensor:
         - switch.template.publish:
             id: motor_drum_down
             state: OFF
+        - globals.set:
+            id: smoothing
+            value: 'false'
         - if:
             condition:
               switch.is_on: clean
@@ -874,31 +880,39 @@ binary_sensor:
               # TODO: stop if opening failed
       on_release:
         - if:
-            all:
-              - switch.is_off: clean
-              - switch.is_off: maintenance
-            then:  # the MCU stops at level itself (pos: level)
+            condition:  # a leveling via smooth only passes level here: it ends when coming back up
+              lambda: return id(smoothing);
+            then:
+              globals.set:
+                id: smoothing
+                value: 'false'
+            else:
               - if:
                   all:
-                    - binary_sensor.is_off: cover
-                    - binary_sensor.is_on: tray
-                    - binary_sensor.is_off: bin
+                    - switch.is_off: clean
+                    - switch.is_off: maintenance
+                  then:  # the MCU stops at level itself (pos: level)
+                    - if:
+                        all:
+                          - binary_sensor.is_off: cover
+                          - binary_sensor.is_on: tray
+                          - binary_sensor.is_off: bin
+                        then:
+                          pkt4_mcu.motor:
+                            motor: tray
+                            direction: close
+                            speed: 5
+                            mode: time
+                            timeout: 80
+                            pos: closed
+              - globals.set:
+                  id: level_needed
+                  value: 'false'
+              - if:
+                  condition:  # while cleaning, level is only passed on the way down: don't "resume" (it would send the drum back up)
+                    switch.is_off: clean
                   then:
-                    pkt4_mcu.motor:
-                      motor: tray
-                      direction: close
-                      speed: 5
-                      mode: time
-                      timeout: 80
-                      pos: closed
-        - globals.set:
-            id: level_needed
-            value: 'false'
-        - if:
-            condition:  # while cleaning, level is only passed on the way down: don't "resume" (it would send the drum back up)
-              switch.is_off: clean
-            then:
-              script.execute: auto_clean
+                    script.execute: auto_clean
     tray:
       id: tray
       name: Tray
@@ -1565,14 +1579,17 @@ script:
                                 if:
                                   condition:
                                     - binary_sensor.is_off: drum_down
-                                  then:
-                                    pkt4_mcu.motor:
-                                      motor: drum
-                                      direction: down
-                                      speed: 100
-                                      mode: time
-                                      timeout: 800
-                                      pos: level
+                                  then:  # stock leveling (FUN_4011ceb8): down past level to smooth, then back up to level (drum_down handler)
+                                    - globals.set:
+                                        id: smoothing
+                                        value: 'true'
+                                    - pkt4_mcu.motor:
+                                        motor: drum
+                                        direction: down
+                                        speed: 100
+                                        mode: time
+                                        timeout: 1000
+                                        pos: smooth
                                   else:
                                     pkt4_mcu.motor:
                                       motor: drum
@@ -1667,6 +1684,9 @@ script:
       - pkt4_mcu.motor:
           motor: drum
           mode: stop
+      - globals.set:
+          id: smoothing
+          value: 'false'
       - if:
           all:
             - switch.is_off: clean
