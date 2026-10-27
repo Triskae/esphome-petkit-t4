@@ -35,6 +35,10 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [ ] Dumping the stock calibration data from factory binaries (per-chip)
 * [x] Weight as additional safety check
 * [ ] Tune the timeouts and speeds
+* [ ] Stock cleaning rules not ported yet (see [docs/cleaning.md](docs/cleaning.md)):
+  * [ ] Minimum interval between two cleanings
+  * [ ] Do-not-disturb hours
+  * [ ] Stock minimum pet weight of 1.5 kg (`Pet Threshold`, 1 kg, is used instead)
 
 
 ## Drum motion
@@ -59,8 +63,14 @@ Motor statuses reported by the MCU are decoded and exposed as diagnostic sensors
 When a pet is detected in front of the entrance, the MCU's own proximity protection (scram mask bits 12/13) stops the drum by itself (verified on hardware, ~140 ms before ESPHome's own stop on `Approach`); ESPHome also stops it on `Pet Inside` (weight) and resumes once `Approach` has been off for 5 s. Passing the level sensor during a cleaning no longer triggers a spurious "resume" ([details](docs/motion.md#fixed-resume-command-while-passing-level)). A pending automatic clean is no longer dropped when a pet is in front as its delay ends: the delay restarts each time `Approach` clears, and the clean waits for the pet to leave ([details](docs/motion.md#fixed-pending-clean-dropped-when-a-pet-is-in-front)). Comparison with the stock behavior: [docs/motion.md](docs/motion.md#stopping-the-drum-when-a-pet-is-detected).
 
 
+## Automatic cleaning
+
+By default (`Clean After Every Visit`), a cleaning is planned after every visit of at least 15 s, whether the pet left waste or not, as the stock firmware does; the waste weight is not looked at. Turning the switch off restores the weight-based decision (`Clean Threshold`). Details: [docs/cleaning.md](docs/cleaning.md).
+
+
 ## Documentation
 
+- [docs/cleaning.md](docs/cleaning.md): automatic cleaning decision, comparison with the stock firmware.
 - [docs/motion.md](docs/motion.md): drum commands, destinations, before/after, hardware tests.
 - [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
 - [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md): diagnostic simulation of the stock weight reference rebasing.

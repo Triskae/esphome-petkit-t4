@@ -280,6 +280,12 @@ globals:
   - id: cleans_left
     type: int
 
+  - id: visit_started_at
+    type: uint32_t
+
+  - id: visit_clean
+    type: bool
+
   - id: level_needed
     type: bool
 
@@ -445,8 +451,8 @@ sensor:
       below: !lambda return id(pet_threshold).state;  # not the actual pet inside
       then:
         if:
-          condition:
-            lambda: return id(cleans_left) <= 0;
+          condition:  # with Clean After Every Visit, waste weight doesn't trigger cleans
+            lambda: return id(cleans_left) <= 0 && !id(clean_every_visit).state;
           then:
             globals.set:
               id: cleans_left
@@ -924,9 +930,28 @@ binary_sensor:
     filters:
       delayed_off: 5s
     on_press:
-      script.execute: emergency_stop
+      - globals.set:
+          id: visit_started_at
+          value: !lambda return millis();
+      - script.execute: emergency_stop
     on_release:
-      script.execute: auto_clean
+      - if:
+          all:
+            - switch.is_on: clean_every_visit
+            - switch.is_on: do_auto_clean
+            - lambda: return millis() - id(visit_started_at) >= 15000;  # stock: shorter visits don't plan a clean (PETIN TOO SHORT)
+          then:
+            - globals.set:
+                id: visit_clean
+                value: 'true'
+            - if:
+                condition:
+                  lambda: return id(cleans_left) <= 0;
+                then:
+                  globals.set:
+                    id: cleans_left
+                    value: !lambda return id(clean_times).state;
+      - script.execute: auto_clean
 
   - platform: template
     id: tray_full
@@ -1181,6 +1206,14 @@ switch:
     restore_mode: restore_default_off  # better safe than sorry!
     on_turn_on:
       script.execute: auto_clean
+
+  - platform: template
+    id: clean_every_visit
+    name: Clean After Every Visit
+    icon: mdi:paw
+    entity_category: config
+    optimistic: yes
+    restore_mode: restore_default_on  # stock behavior: the waste weight isn't looked at
 
   - platform: template
     id: block_movement
@@ -1526,11 +1559,19 @@ script:
             - any:
               - all:
                 - switch.is_on: do_auto_clean
-                - lambda: return id(pet_weight).state*1000 > id(clean_threshold).state;
+                - lambda: |-
+                    if (id(clean_every_visit).state) return id(visit_clean);  // stock: clean after every valid visit, whatever the waste
+                    return id(pet_weight).state*1000 > id(clean_threshold).state;
               - lambda: return (id(cleans_left) > 0 && id(cleans_left) < id(clean_times).state);
           then:
-            switch.turn_on: clean
+            - globals.set:
+                id: visit_clean
+                value: 'false'
+            - switch.turn_on: clean
           else:
+            - globals.set:
+                id: visit_clean
+                value: 'false'
             - globals.set:
                 id: cleans_left
                 value: '0'
