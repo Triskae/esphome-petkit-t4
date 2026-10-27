@@ -28,18 +28,42 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [x] Auto cleaning start (a.k.a. non-kitten mode)
 * [ ] Pet weight saving
 * [ ] Multiple pets support
-* [ ] Extra unknown packets (all packet types sent by the MCU are now identified, see [docs/mcu-protocol.md](docs/mcu-protocol.md))
-* [ ] Better & more failsafe motor control (drum stops are now done by the MCU and motor statuses are exposed to HA, see [Drum motion](#drum-motion); they do not drive retries yet)
+* [x] Extra unknown packets (all packet types sent by the MCU are identified, see [docs/mcu-protocol.md](docs/mcu-protocol.md); motor statuses are decoded and exposed to HA)
+* [ ] Better & more failsafe motor control (every drum and flap stop is now done by the MCU, motor statuses are exposed to HA and a failed flap close is detected, see [Drum motion](#drum-motion); they do not drive retries yet)
 * [ ] Parametrized MCU init
 * [ ] Automated calibration
 * [ ] Dumping the stock calibration data from factory binaries (per-chip)
 * [x] Weight as additional safety check
+* [x] Drum and flap moves stopped by the MCU at stock destinations (no more overshoot or stuck leveling screen), see [docs/motion.md](docs/motion.md)
+* [x] Robust MCU UART reading (no lost frames during motion)
+* [x] Cleaning like stock: dump, pause, smooth, pause, level
+* [x] Leveling like stock: via smooth when coming from the dump side
+* [x] Maintenance like stock: flap closed, relative move up
+* [x] Pet detection: the MCU stops the drum by itself; no spurious resume when passing level; a pending clean waits for the pet to leave instead of being dropped
+* [x] Clean after every visit, as stock, instead of on waste weight (see [docs/cleaning.md](docs/cleaning.md))
+* [x] Full waste bin detected from a failed flap close, cleanings blocked until `Bin Emptied` (see [docs/cleaning.md](docs/cleaning.md#full-waste-bin))
+* [x] `Block Movement` blocks every move on its own
 * [ ] Tune the timeouts and speeds
 * [ ] Stock cleaning rules not ported yet (see [docs/cleaning.md](docs/cleaning.md)):
   * [ ] Minimum interval between two cleanings
   * [ ] Do-not-disturb hours
   * [ ] Stock minimum pet weight of 1.5 kg (`Pet Threshold`, 1 kg, is used instead)
-
+* [ ] Stock motion details not ported yet (see [docs/motion.md](docs/motion.md)):
+  * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
+  * [ ] Detect a failed flap opening (only a failed close is detected)
+  * [ ] Leveling: 0.5 s pauses, final 30-step move, and the swing via smooth even when already level
+  * [ ] Maintenance: the 900 s wait step and the exit with the OK button
+  * [ ] Recipe variants: flap homing before opening, relative moves and shakes (the selecting settings are not identified)
+  * [ ] Scram mask switched per step (static `0x704C` for now)
+* [ ] MCU link supervision (see [docs/mcu-protocol.md](docs/mcu-protocol.md)):
+  * [ ] Complete the heartbeat handshake (the MCU keeps announcing `00`)
+  * [ ] Report an error when the MCU stays silent for 15 s, as stock does
+  * [ ] Weekly MCU reboot (stock, packet `0xA`)
+  * [ ] Identify stock settings `0x12`, `0x23` and `3`, and the remaining stop codes (`4`; `5` = stall and `18` = close timeout are known)
+* [ ] Weight:
+  * [ ] Weight reference rebasing like stock (now only simulated by the shadow sensors), with the deposit measured when the pet leaves, before the reference absorbs it (see [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md))
+  * [ ] Residual weight sits around -15 to -22 g after cleanings
+  * [ ] Detect the waste bin removal (not reported on T4-MAIN-V2.3; `Bin Emptied` button meanwhile)
 
 ## Drum motion
 
