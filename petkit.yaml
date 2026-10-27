@@ -286,6 +286,10 @@ globals:
   - id: visit_clean
     type: bool
 
+  - id: bin_full  # the waste flap failed to close: cleared only by emptying the bin
+    type: bool
+    restore_value: yes
+
   - id: level_needed
     type: bool
 
@@ -766,16 +770,21 @@ binary_sensor:
               - binary_sensor.is_off: bin
               - binary_sensor.is_off: cover
             then:
-              - globals.set:
-                  id: litter_discarded
-                  value: !lambda return (id(litter_discarded) + max(0.f, (id(litter_mass) - max(0.f, id(weight).state))));
-              - globals.set:
-                  id: waste_collected
-                  value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(litter_mass)));
-              - globals.set:
-                  id: litter_mass
-                  value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(waste_collected)));
-              - script.execute: level_if_needed
+              script.execute: bin_emptied
+    tray_close_failed:
+      id: tray_close_failed
+      name: Tray Close Failed
+      entity_category: diagnostic
+      on_press:
+        if:
+          all:  # a close interrupted on purpose (cover opened, bin removed, maintenance) doesn't mean a full bin
+            - binary_sensor.is_off: cover
+            - binary_sensor.is_off: bin
+            - switch.is_off: maintenance
+          then:
+            globals.set:
+              id: bin_full
+              value: 'true'
     cover:
       id: cover
       name: Cover
@@ -959,7 +968,7 @@ binary_sensor:
     icon: mdi:tray-full
     device_class: problem
     entity_category: diagnostic
-    lambda: return id(waste_collected) >= id(tray_capacity).state;
+    lambda: return id(bin_full) || id(waste_collected) >= id(tray_capacity).state;
 
   - platform: template
     name: Level Needed
@@ -1040,6 +1049,16 @@ button:
               - script.execute: level_if_needed
 
   - platform: template
+    name: Bin Emptied
+    icon: mdi:delete-restore
+    on_press:  # the bin sensor doesn't report removal on every unit
+      if:
+        condition:
+          binary_sensor.is_off: cover
+        then:
+          script.execute: bin_emptied
+
+  - platform: template
     name: All Litter Removed
     icon: mdi:delete-empty
     entity_category: config
@@ -1098,6 +1117,7 @@ switch:
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: bin
           - binary_sensor.is_off: drum_up
+          - lambda: return id(clean).state || !id(tray_full).state;  # never start dumping into a full bin, even manually; a running clean may still resume
         then:
           if:
             all:
@@ -1576,6 +1596,22 @@ script:
                 id: cleans_left
                 value: '0'
             - script.execute: level_if_needed
+
+  - id: bin_emptied
+    then:
+      - globals.set:
+          id: litter_discarded
+          value: !lambda return (id(litter_discarded) + max(0.f, (id(litter_mass) - max(0.f, id(weight).state))));
+      - globals.set:
+          id: waste_collected
+          value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(litter_mass)));
+      - globals.set:
+          id: litter_mass
+          value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(waste_collected)));
+      - globals.set:
+          id: bin_full
+          value: 'false'
+      - script.execute: level_if_needed
 
   - id: auto_clean
     then:

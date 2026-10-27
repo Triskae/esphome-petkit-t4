@@ -67,6 +67,8 @@ When a pet is detected in front of the entrance, the MCU's own proximity protect
 
 By default (`Clean After Every Visit`), a cleaning is planned after every visit of at least 15 s, whether the pet left waste or not, as the stock firmware does; the waste weight is not looked at. Turning the switch off restores the weight-based decision (`Clean Threshold`). Details: [docs/cleaning.md](docs/cleaning.md).
 
+A full waste bin is detected like the stock firmware does, when the waste flap fails to close (`Tray Close Failed`); `Tray Full` then stays on until the `Bin Emptied` button is pressed, and no cleaning, automatic or manual, starts meanwhile ([details](docs/cleaning.md#full-waste-bin)).
+
 
 ## Documentation
 

@@ -22,6 +22,7 @@ CONF_DRUM_UP = 'drum_up'
 CONF_DRUM_DOWN = 'drum_down'
 CONF_DRUM_LEVEL = 'drum_level'
 CONF_TRAY = 'tray'
+CONF_TRAY_CLOSE_FAILED = 'tray_close_failed'
 
 CONFIG_SCHEMA = cv.Schema({
 	cv.GenerateID(): cv.use_id(PKT4MCUComponent),
@@ -45,6 +46,10 @@ CONFIG_SCHEMA = cv.Schema({
 	),
 	cv.Optional(CONF_TRAY): binary_sensor.binary_sensor_schema(
 		device_class=DEVICE_CLASS_OPENING,
+	),
+	# Result of the last tray (waste flap) close: on when the motor stopped before the closed position.
+	cv.Optional(CONF_TRAY_CLOSE_FAILED): binary_sensor.binary_sensor_schema(
+		device_class=DEVICE_CLASS_PROBLEM,
 	),
 })
 
@@ -81,3 +86,7 @@ async def to_code(config):
 	if approach_config := config.get(CONF_APPROACH):
 		sens = await binary_sensor.new_binary_sensor(approach_config)
 		cg.add(var.set_approach_sensor(sens))
+
+	if tray_close_failed_config := config.get(CONF_TRAY_CLOSE_FAILED):
+		sens = await binary_sensor.new_binary_sensor(tray_close_failed_config)
+		cg.add(var.set_tray_close_failed_sensor(sens))

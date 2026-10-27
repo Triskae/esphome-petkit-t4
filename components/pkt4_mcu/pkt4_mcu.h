@@ -39,6 +39,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void set_drum_down_sensor(binary_sensor::BinarySensor *drum_down_sensor) { this->drum_down_sensor_ = drum_down_sensor; }
 		void set_drum_level_sensor(binary_sensor::BinarySensor *drum_level_sensor) { this->drum_level_sensor_ = drum_level_sensor; }
 		void set_tray_sensor(binary_sensor::BinarySensor *tray_sensor) { this->tray_sensor_ = tray_sensor; }
+		void set_tray_close_failed_sensor(binary_sensor::BinarySensor *sensor) { this->tray_close_failed_sensor_ = sensor; }
 		// Motor status (type 0x3) feedback, per motor: 0 = drum, 1 = tray.
 		void set_motor_position_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_position_sensor_[motor] = sensor; }
 		void set_motor_stop_code_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_stop_code_sensor_[motor] = sensor; }
@@ -73,7 +74,9 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		                            *drum_up_sensor_{nullptr},
 		                            *drum_down_sensor_{nullptr},
 		                            *drum_level_sensor_{nullptr},
-		                            *tray_sensor_{nullptr};
+		                            *tray_sensor_{nullptr},
+		                            *tray_close_failed_sensor_{nullptr};
+		bool tray_closing_{false};  // a tray close command is in progress
 
 		void send_(uint8_t pid, uint8_t payload[], uint8_t len);
 };

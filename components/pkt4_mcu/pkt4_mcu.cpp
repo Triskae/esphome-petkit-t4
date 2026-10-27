@@ -212,6 +212,13 @@ void PKT4MCUComponent::handle_packet_() {
 			if (auto *s = this->motor_current_sensor_[node->node]) s->publish_state(data->cur);
 			if (data->result != 2)
 				if (auto *s = this->motor_stop_code_sensor_[node->node]) s->publish_state(data->scram);
+
+			// Stock infers a full waste bin when the flap fails to close (MOTO_DOOR_CLOSE timeout -> WASTEBOX_FULL).
+			if (node->node == 1 && data->result != 2 && this->tray_closing_) {
+				this->tray_closing_ = false;
+				if (data->pos != 9) ESP_LOGW(TAG, "Tray close failed: stopped at pos=%u scram=%u", data->pos, data->scram);
+				if (this->tray_close_failed_sensor_) this->tray_close_failed_sensor_->publish_state(data->pos != 9);
+			}
 		}; break;
 
 		case 0x9: {
@@ -325,6 +332,8 @@ void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uin
 		.timeout = timeout,
 		.tag = 0,
 	};
+	// Stop commands (mode 2) don't end the tracked close: the closed-position hall edge itself sends one.
+	if (motor == 1 && mode != 2) this->tray_closing_ = (direction == 2);
 	this->send_(0x2, (uint8_t*)&buf, sizeof(buf));
 }
 

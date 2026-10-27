@@ -21,5 +21,23 @@ ESPHome used the residual weight instead. In practice it caused problems: the re
 
 Not ported from the stock decision: minimum interval between cleanings, do-not-disturb hours and the stock minimum pet weight (1.5 kg; `Pet Threshold` is used instead).
 
-Waste accounting (`Waste Collected`, `Tray Full`) still uses the weight and is unchanged.
+Waste accounting (`Waste Collected`) still uses the weight; `Tray Full` also uses it, see below.
 
+## Full waste bin
+
+The stock firmware has no fill sensor: it infers a full bin when the waste flap fails to close at the end of a cleaning (`MOTO_DOOR_CLOSE timeout` → `clean WASTEBOX_FULL!`). This component does the same, and also blocks the drum.
+
+| Entity | Meaning |
+|---|---|
+| `Tray Close Failed` (diagnostic) | result of the last flap close: on when the tray motor stopped before the closed position (status position ≠ 9) |
+| `Tray Full` | on when the flap failed to close (latched, survives reboots) **or** `Waste Collected` ≥ `Tray Capacity` |
+| `Bin Emptied` (button) | to press after emptying the bin: resets `Waste Collected` and clears the latched full state |
+
+While `Tray Full` is on, no cleaning starts, automatic or manual. A cleaning already running can still resume after a pet interruption, so the drum is never left at dump. Leveling stays allowed.
+
+Differences with the stock firmware:
+- Stock reports the full bin (display, app) and clears it after the next successful close; no path blocking the next cleaning was found. Here the full state is latched until `Bin Emptied`, so a later close that pushes through doesn't dump again into a full bin.
+- A close interrupted by the cover, the bin removal or maintenance is not counted as a full bin.
+- `Bin Emptied` is needed because removing the bin is not reported on every unit (`Bin` never changes on a T4-MAIN-V2.3).
+
+Not validated on hardware with a really full bin. Don't block the flap by hand to test it.
