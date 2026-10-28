@@ -141,9 +141,13 @@ Stops are still sent where they are needed: `Approach` / `Pet Inside` (`emergenc
 
 The flap destinations come from the stock builder and production test, and are confirmed on hardware: the MCU stops at position 7 / 9 with stop code 0 (see below).
 
+### Fixed: cleaning held at dump
+
+At dump the drum pauses 3 s, then `level_if_needed` sends it down. If a pet came during that pause, `Approach` was still on when the pause ended (5 s `delayed_off`), so nothing moved; when it cleared, `auto_clean` resumed with `Clean`, which refuses to start while `Drum Up` is on, and its refusal turned the cleaning off. The drum stayed at dump until the next event that runs `level_if_needed` (next approach, visit, cover). A resume refused only because the drum is at dump now carries on down (`level_if_needed`); a new cleaning still can't start from dump. Found by reading the code, not observed.
+
 ## Fixed: Block Movement
 
-The guard in `level_if_needed` and `clean_if_needed` was a list of conditions, which ESPHome ANDs: moves were only blocked during an OTA **and** with `Block Movement` on. The guard is now "OTA in progress **or** `Block Movement`" (substitution `movement_blocked`), checked by those scripts and by every command that starts a move: `Clean`, `Maintenance`, `Tray`, `Drum Up`, `Drum Down`. The conditions read the states directly; the `Movement Blocked` diagnostic sensor only shows it in Home Assistant (reading the sensor itself made the leveling requested when `Block Movement` is turned off see a stale "blocked" and do nothing).
+The guard in `level_if_needed` and `clean_if_needed` was a list of conditions, which ESPHome ANDs: moves were only blocked during an OTA **and** with `Block Movement` on. The guard is now "OTA in progress **or** `Block Movement`" (substitution `movement_blocked`; only a running update counts: an aborted or failed one, which doesn't reboot, used to keep every move blocked until a reboot, and now runs the pending leveling), checked by those scripts and by every command that starts a move: `Clean`, `Maintenance`, `Tray`, `Drum Up`, `Drum Down`. The conditions read the states directly; the `Movement Blocked` diagnostic sensor only shows it in Home Assistant (reading the sensor itself made the leveling requested when `Block Movement` is turned off see a stale "blocked" and do nothing).
 
 ### Hardware validation (27 October 2026, 23:28–23:36)
 

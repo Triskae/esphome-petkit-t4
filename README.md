@@ -44,6 +44,7 @@ It's able to work completely offline & without HA, although it's recommended to 
 * [x] Clean after every visit, as stock, instead of on waste weight (see [docs/cleaning.md](docs/cleaning.md))
 * [x] Full waste bin detected from a failed flap close, cleanings blocked until `Bin Emptied` (see [docs/cleaning.md](docs/cleaning.md#full-waste-bin))
 * [x] `Block Movement` blocks every move on its own
+* [x] A cleaning interrupted by a pet at dump carries on, and an aborted OTA no longer blocks moves until a reboot (see [docs/motion.md](docs/motion.md#fixed-cleaning-held-at-dump))
 * [ ] Tune the timeouts and speeds
 * [ ] Stock cleaning rules not ported yet (see [docs/cleaning.md](docs/cleaning.md)):
   * [ ] Minimum interval between two cleanings

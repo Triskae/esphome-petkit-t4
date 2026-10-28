@@ -47,10 +47,15 @@ ota:
     - pkt4_mcu.motor:
         motor: drum
         mode: stop
-    - globals.set:
+    - globals.set:  # only a running update blocks moves: an aborted or failed one doesn't reboot
         id: ota_state
-        value: !lambda return state;
+        value: !lambda return state == ota::OTA_STARTED || state == ota::OTA_IN_PROGRESS;
     - component.update: oled
+    - if:
+        condition:
+          lambda: return state == ota::OTA_ABORT || state == ota::OTA_ERROR;
+        then:
+          script.execute: level_if_needed  # finish what the update interrupted (a completed one reboots)
 
 api:
   encryption:
@@ -1277,8 +1282,15 @@ switch:
                   timeout: 1000
                   pos: dump  # the MCU stops at the dump sensor itself, as stock does
         else:
-          - delay: 0s  # yield
-          - switch.turn_off: clean
+          if:
+            all:  # resuming while held at dump (a pet came during the pause): carry on down instead of dropping the cleaning
+              - lambda: return id(clean).state;
+              - binary_sensor.is_on: drum_up
+            then:
+              script.execute: level_if_needed
+            else:
+              - delay: 0s  # yield
+              - switch.turn_off: clean
     turn_off_action:
       - pkt4_mcu.motor:
           motor: drum
