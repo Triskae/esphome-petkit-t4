@@ -120,7 +120,7 @@ MCU link ([docs/mcu-protocol.md](docs/mcu-protocol.md)):
 * [x] Robust UART reading (no lost frames during motion)
 * [x] Report an error when the MCU stays silent for 15 s, as stock does (`MCU Link Lost`)
 * [x] Weekly MCU reboot (stock, packet `0xA`), only when idle; `Reboot MCU` button
-* [ ] Complete the heartbeat handshake (the MCU keeps announcing `00`)
+* [x] Complete the heartbeat handshake as stock: init frames 20 ms apart, one sequence counter per frame type (`MCU Handshake`)
 * [ ] Identify stock settings `0x12`, `0x23` and `3`, and the remaining stop codes
 * [ ] Parametrized MCU init
 

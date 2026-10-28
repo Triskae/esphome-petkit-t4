@@ -3,6 +3,7 @@ import esphome.config_validation as cv
 from esphome.components import binary_sensor
 from esphome.const import (
 	CONF_ID,
+	DEVICE_CLASS_CONNECTIVITY,
 	DEVICE_CLASS_MOTION,
 	DEVICE_CLASS_MOVING,
 	DEVICE_CLASS_OCCUPANCY,
@@ -24,6 +25,7 @@ CONF_DRUM_LEVEL = 'drum_level'
 CONF_TRAY = 'tray'
 CONF_TRAY_CLOSE_FAILED = 'tray_close_failed'
 CONF_LINK_LOST = 'link_lost'
+CONF_HANDSHAKE = 'handshake'
 
 CONFIG_SCHEMA = cv.Schema({
 	cv.GenerateID(): cv.use_id(PKT4MCUComponent),
@@ -55,6 +57,10 @@ CONFIG_SCHEMA = cv.Schema({
 	# No frame from the MCU for more than 15 s (stock error `mcu`).
 	cv.Optional(CONF_LINK_LOST): binary_sensor.binary_sensor_schema(
 		device_class=DEVICE_CLASS_PROBLEM,
+	),
+	# The MCU heartbeat reads 01: it acknowledged the handshake (inferred from the stock capture).
+	cv.Optional(CONF_HANDSHAKE): binary_sensor.binary_sensor_schema(
+		device_class=DEVICE_CLASS_CONNECTIVITY,
 	),
 })
 
@@ -99,3 +105,7 @@ async def to_code(config):
 	if link_lost_config := config.get(CONF_LINK_LOST):
 		sens = await binary_sensor.new_binary_sensor(link_lost_config)
 		cg.add(var.set_link_lost_sensor(sens))
+
+	if handshake_config := config.get(CONF_HANDSHAKE):
+		sens = await binary_sensor.new_binary_sensor(handshake_config)
+		cg.add(var.set_handshake_sensor(sens))

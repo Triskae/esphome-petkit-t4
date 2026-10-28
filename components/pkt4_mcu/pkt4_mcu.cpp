@@ -40,6 +40,7 @@ void PKT4MCUComponent::loop() {
 	// Drain every complete frame already buffered: handling one per loop() let the RX buffer overflow under load.
 	while (this->read_packet_())
 		this->handle_packet_();
+	this->flush_tx_();
 
 	// Stock raises its `mcu` error when no frame was received for more than 15 s (0x4012635c).
 	const bool lost = millis() - this->last_rx_ms_ > LINK_TIMEOUT_MS;
@@ -125,6 +126,13 @@ void PKT4MCUComponent::handle_packet_() {
 				break;
 			}
 			ESP_LOGV(TAG, "MCU heartbeat: seq=%u value=0x%02X", this->packet_.seq, node->data[0]);
+			// Inferred from the stock capture: 00 = waiting for the ESP, 01 = handshake (type 0 {00}) acknowledged.
+			if (node->data[0] != this->heartbeat_) {
+				this->heartbeat_ = node->data[0];
+				ESP_LOGI(TAG, "MCU heartbeat %02X: %s", this->heartbeat_,
+				         this->heartbeat_ == 0x01 ? "handshake acknowledged" : this->heartbeat_ == 0x00 ? "waiting for the handshake" : "unknown value");
+			}
+			if (this->handshake_sensor_) this->handshake_sensor_->publish_state(this->heartbeat_ == 0x01);
 		}; break;
 
 		case 0x1: {
@@ -366,6 +374,7 @@ void PKT4MCUComponent::reboot() {
 
 void PKT4MCUComponent::deinit() {
 	this->inited_ = false;
+	this->heartbeat_ = 0xFF;  // log the next heartbeat again
 	ESP_LOGW(TAG, "Deinited T4 MCU");
 }
 
@@ -418,7 +427,7 @@ void PKT4MCUComponent::send_(uint8_t pid, uint8_t payload[], uint8_t len) {
 		.magic = MAGIC,
 		.len = (uint8_t)(offsetof(MCUPacket, payload) + len + sizeof(uint16_t)),
 		.pid = pid,
-		.seq = this->seq_++,
+		.seq = ++this->seq_[pid & 0xF],  // one counter per type, from 1, as stock (FUN_4012e084)
 		.err = 0xFF,
 	};
 
@@ -426,7 +435,17 @@ void PKT4MCUComponent::send_(uint8_t pid, uint8_t payload[], uint8_t len) {
 	*(uint16_t*)((uint8_t*)packet.payload + len) = crc16be((uint8_t*)&packet, (packet.len - sizeof(uint16_t)), 0xffff);
 
 	ESP_LOGD(TAG, "> %X len=%u", packet.pid, (packet.len - offsetof(MCUPacket, payload) - sizeof(uint16_t)));
-	this->write_array((uint8_t*)&packet, packet.len);
+	this->tx_queue_.emplace_back((uint8_t*)&packet, (uint8_t*)&packet + packet.len);
+	this->flush_tx_();
+}
+
+// Stock waits 2 ticks (20 ms) between the frames of its init sequence; the frames sent back to back used to reach the
+// MCU in one burst. Every frame goes through this queue, so a lone command still leaves at once.
+void PKT4MCUComponent::flush_tx_() {
+	if (this->tx_queue_.empty() || millis() - this->last_tx_ms_ < TX_GAP_MS) return;
+	this->write_array(this->tx_queue_.front());
+	this->tx_queue_.pop_front();
+	this->last_tx_ms_ = millis();
 }
 
 }  // namespace pkt4_mcu

@@ -695,6 +695,9 @@ binary_sensor:
     link_lost:
       name: MCU Link Lost
       entity_category: diagnostic
+    handshake:
+      name: MCU Handshake
+      entity_category: diagnostic
     cover:
       id: cover
       name: Cover

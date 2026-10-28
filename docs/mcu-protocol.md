@@ -20,7 +20,7 @@ Each row is labeled **confirmed** (code + hardware), **static** (code only) or *
 | 1 | node 0: status bits; node 1: sensor words | yes |
 | 2 | motor configuration echo (10 bytes) | yes |
 | 3 | motor status (14 bytes) | yes |
-| 4 | motor parameter block readback (11 bytes) | yes, after an MCU reboot; this component compares it with the block sent at init and logs `Drum/Tray motor parameters confirmed by the MCU`, or a warning with both values when they differ |
+| 4 | motor parameter block readback (11 bytes) | yes, after an MCU reboot; this component compares it with the block sent at init and logs `Drum/Tray motor parameters confirmed by the MCU`, or a warning with both values when they differ. Seen on 28 October 2026: drum confirmed, tray read back as `1200, 20, 20, 20` instead of `1300, 200, 30, 20` (meaning unknown) |
 | 5 | 18-byte motor block, cached only | never |
 | 6 | ignored | never |
 | 7 | weight samples, into a FIFO | yes |
@@ -89,7 +89,7 @@ The **scram mask** is `0xF04C` for device types 12/13 and `0x704C` otherwise (bi
 
 ## Heartbeat and link supervision
 
-- Before the handshake, the MCU sends its version (type 9) followed by a heartbeat `00` about once a second. After the ESP sends type 0 `{00}`, the stock capture shows a heartbeat `01`, then no more spontaneous version/heartbeat (**inferred**: `00` = waiting for the ESP, `01` = acknowledged). With this component the MCU keeps announcing `00` every second; the reason is not established.
+- Before the handshake, the MCU sends its version (type 9) followed by a heartbeat `00` about once a second. After the ESP sends type 0 `{00}`, the stock capture shows a heartbeat `01`, then no more spontaneous version/heartbeat (**inferred**: `00` = waiting for the ESP, `01` = acknowledged). This component used to send the init sequence in one burst with a single sequence counter, and the MCU kept announcing `00` every second. Stock waits 2 ticks (20 ms) between init frames and keeps one sequence counter per frame type, starting at 1 (`FUN_4012e084`); the component now does both, and the handshake is acknowledged (28 October 2026: heartbeat `01` and no more version announcements, after an ESP restart and after an MCU reboot, where `00` turned to `01` 0.9 s after the init). `MCU Handshake` shows it.
 - The stock firmware does not read the heartbeat value in any business path. Every handled frame (types 0–5, 7–9) updates a last-reception time (`FUN_40127118`, `0x3ffcc3c0`).
 - **Error `mcu`** (index 1 of the 19-entry error table at `0x4010caac`: `DC, mcu, scale, falldown, moto_M, moto_D, hallT, hallB, hallH, hallD, hallS, hallO, hallC, PROX, rtc, atmz, full, scaleD, OLED`) is raised when nothing was received for **more than 15 s** (`0x4012635c`).
 - At task start, if the last MCU reboot is older than **7 days** (604800 s), the stock firmware checks the link with type 9 reads, then **reboots the MCU with type 0xA** and runs `mcu init` again. The reboot frame is a write on node 0 with no data (`FUN_401273a8` → `FUN_4012e084(10, 0, 0, 0, 0, …)`): `5A A5 09 0A <seq> FF 00 <crc>`.

@@ -5,11 +5,15 @@
 #include <esphome/components/sensor/sensor.h>
 #include <esphome/components/uart/uart.h>
 
+#include <deque>
+#include <vector>
+
 namespace esphome {
 namespace pkt4_mcu {
 
 static const uint16_t MAGIC = 0xA55A;
 static const uint32_t LINK_TIMEOUT_MS = 15000;
+static const uint32_t TX_GAP_MS = 20;  // between two frames sent to the MCU
 static const uint32_t REBOOT_SETTLE_MS = 2000;  // status bits ignored after an MCU reboot
 
 // Meaning of a motor stop code (scram), from the stock handling (FUN_4011d300, FUN_4011e008).
@@ -52,6 +56,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void set_tray_sensor(binary_sensor::BinarySensor *tray_sensor) { this->tray_sensor_ = tray_sensor; }
 		void set_tray_close_failed_sensor(binary_sensor::BinarySensor *sensor) { this->tray_close_failed_sensor_ = sensor; }
 		void set_link_lost_sensor(binary_sensor::BinarySensor *sensor) { this->link_lost_sensor_ = sensor; }
+		void set_handshake_sensor(binary_sensor::BinarySensor *sensor) { this->handshake_sensor_ = sensor; }
 		// Motor status (type 0x3) feedback, per motor: 0 = drum, 1 = tray.
 		void set_motor_position_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_position_sensor_[motor] = sensor; }
 		void set_motor_stop_code_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_stop_code_sensor_[motor] = sensor; }
@@ -73,7 +78,10 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		uint8_t rx_len_{0};  // bytes of packet_ received so far
 		uint32_t rx_dropped_{0},
 		         rx_dropped_total_{0};
-		uint8_t seq_{0};
+		uint8_t seq_[16]{};  // per frame type
+		std::deque<std::vector<uint8_t>> tx_queue_;
+		uint32_t last_tx_ms_{0};
+		uint8_t heartbeat_{0xFF};  // last heartbeat value from the MCU
 
 		bool read_packet_();
 		void handle_packet_();
@@ -91,7 +99,8 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		                            *drum_level_sensor_{nullptr},
 		                            *tray_sensor_{nullptr},
 		                            *tray_close_failed_sensor_{nullptr},
-		                            *link_lost_sensor_{nullptr};
+		                            *link_lost_sensor_{nullptr},
+		                            *handshake_sensor_{nullptr};
 		uint32_t last_rx_ms_{0};  // last valid frame, any type
 		bool link_lost_{false};
 		bool rebooting_{false};  // status bits are ignored until REBOOT_SETTLE_MS after rebooted_ms_
@@ -102,6 +111,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		bool stop_reported_[2]{};  // the stop of the last command was already reported
 
 		void send_(uint8_t pid, uint8_t payload[], uint8_t len);
+		void flush_tx_();
 };
 
 template<typename... Ts> class InitAction: public Action<Ts...>, public Parented<PKT4MCUComponent> {
