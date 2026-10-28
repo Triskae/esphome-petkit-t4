@@ -56,7 +56,6 @@ section.step li { margin-bottom: 4px; }
 .callout.warn { border-left-color: #d08a14; }
 .callout.danger { border-left-color: var(--err); }
 .callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
-.photo { border: 2px dashed var(--border); border-radius: 12px; padding: 32px 16px; text-align: center; color: var(--muted); margin: 0 0 16px; }
 .tool { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 0 0 16px; }
 .tool h3 { font-size: 1rem; margin: 0 0 12px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
