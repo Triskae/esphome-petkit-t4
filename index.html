@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PetKit T4 Install Guide</title>
+<meta name="description" content="Install the ESPHome firmware on a PetKit PURA MAX (T4): backup, calibration, configuration, flashing and restore, from the browser.">
+<link rel="stylesheet" href="site/style.css">
+</head>
+<body>
+<main>
+	<header class="hero">
+		<h1>PetKit PURA MAX (T4) ESPHome install guide</h1>
+		<p>Back up the stock firmware, extract the factory calibration, configure, flash ESPHome, and restore the stock firmware if needed. The serial steps run in this page: nothing is uploaded, everything stays between your browser and the litter box.</p>
+	</header>
+
+	<div class="callout danger">
+		<p><strong>Experimental firmware, at your own risk.</strong> It fully replaces the stock firmware and drives the motors of a device your pet goes into. Opening the device and flashing it may void the warranty or damage it. Only go ahead if you are comfortable with electronics and ESPHome, and never leave a pet near the litter box while testing.</p>
+	</div>
+
+	<nav class="toc">
+		<ol>
+			<li><a href="#hardware">What you need</a></li>
+			<li><a href="#open">Open and wire</a></li>
+			<li><a href="#connect">Download mode and connection</a></li>
+			<li><a href="#backup">Back up the stock firmware</a></li>
+			<li><a href="#secrets">Prepare <code>secrets.yaml</code></a></li>
+			<li><a href="#compile">Compile the firmware</a></li>
+			<li><a href="#flash">Flash ESPHome</a></li>
+			<li><a href="#first-boot">First boot</a></li>
+			<li><a href="#restore">Restore the stock firmware</a></li>
+			<li><a href="#troubleshooting">Troubleshooting</a></li>
+		</ol>
+	</nav>
+
+	<section class="step" id="hardware">
+		<h2>1. What you need</h2>
+		<ul>
+			<li>A <strong>USB to serial adapter with 3.3 V logic</strong> (CP2102, CH340, FT232…). Not a 5 V one.</li>
+			<li>Three wires and a soldering iron (or test probes held on the pads).</li>
+			<li>A screwdriver to open the device.</li>
+			<li><strong>Chrome or Edge on a computer</strong> for the interactive steps (they use Web Serial; Safari and Firefox don't support it). The equivalent <code>esptool</code> commands are given for every step.</li>
+			<li><a href="https://esphome.io/guides/installing_esphome.html">ESPHome</a> to compile the firmware, and Home Assistant to use it (optional: it also works offline).</li>
+			<li>A known mass, ideally around 5 kg and known to 10 g, for the weight calibration.</li>
+		</ul>
+		<p>This guide was written for the <strong>T4-MAIN-V2.3</strong> main board; the photos show a V1.3, laid out the same way around the ESP32. Other revisions exist: check the labels on your board before wiring.</p>
+	</section>
+
+	<section class="step" id="open">
+		<h2>2. Open and wire</h2>
+		<ol>
+			<li>Remove the pet, unplug the litter box, and empty the drum.</li>
+			<li>Open the top housing to reach the main board, next to the display.</li>
+			<li>Find the <strong>ESP32 serial header, right next to the ESP32 module</strong>, labelled <code>GND</code>, <code>WTXD</code>, <code>WRXD</code> and <code>WTX1</code>.</li>
+		</ol>
+		<figure>
+			<a href="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/breakdown.jpg"><img src="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/breakdown.jpg" alt="T4 main board: ESP32 module top left, its serial header to its right, the ISD motor MCU and its DEBUG header in the middle" loading="lazy"></a>
+			<figcaption>Main board (T4-MAIN-V1.3): the ESP32 serial header is the row of pins right of the ESP32 module; the <code>DEBUG</code> header next to the beeper belongs to the motor MCU. Photo: <a href="https://github.com/earlynerd/petkit-pura-max-serial-bus/tree/main/PCBAs/Main%20Board">earlynerd</a>, thanks to them, all credit goes to them.</figcaption>
+		</figure>
+		<p>The three ESP32 serial pads are on the <strong>underside of the board</strong>, labelled <code>WRXD</code>, <code>WTXD</code> and <code>GND</code>: solder the wires there, or hold probes on them firmly.</p>
+		<figure>
+			<svg class="board" viewBox="0 0 4154 3512" role="img" aria-label="Underside of the T4 main board: the WRXD, WTXD and GND pads circled in green at the top, the motor MCU DEBUG header and the WTX1 pads circled in red">
+				<image href="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/Bottom.JPG" width="4154" height="3512"/>
+				<rect class="mark ok" x="2310" y="440" width="290" height="250" rx="40"/>
+				<rect class="mark bad" x="1570" y="730" width="310" height="370" rx="40"/>
+				<rect class="mark bad" x="3350" y="750" width="220" height="250" rx="40"/>
+			</svg>
+			<figcaption><span class="key ok"></span> ESP32 serial pads, the ones to use. <span class="key bad"></span> Not these: the motor MCU <code>DEBUG</code> header (left) and the stock debug output <code>WTX1</code> (right). Photo: <a href="https://github.com/earlynerd/petkit-pura-max-serial-bus/tree/main/PCBAs/Main%20Board">earlynerd</a>, thanks to them, all credit goes to them.</figcaption>
+		</figure>
+		<figure>
+			<svg class="board zoom" viewBox="2250 380 410 330" role="img" aria-label="Close-up of the WRXD, WTXD and GND pads">
+				<image href="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/Bottom.JPG" width="4154" height="3512"/>
+				<text class="pin" x="2360" y="425">→ TX</text><text class="pin" x="2445" y="425">→ RX</text><text class="pin" x="2530" y="425">GND</text>
+			</svg>
+			<figcaption>Close-up, from left to right: <code>WRXD</code> to the adapter's TX, <code>WTXD</code> to the adapter's RX, <code>GND</code> to its GND. Photo: <a href="https://github.com/earlynerd/petkit-pura-max-serial-bus/tree/main/PCBAs/Main%20Board">earlynerd</a>, thanks to them, all credit goes to them.</figcaption>
+		</figure>
+		<div class="callout warn">
+			<p><strong>Don't use the other serial header.</strong> The <code>DEBUG</code> header (<code>GND RX TX DEBUG</code>, next to the beeper) goes to the motor MCU (ISD), not to the ESP32: <code>esptool</code> then fails with <code>Failed to connect</code>. <code>WTX1</code> is a debug output of the stock firmware and isn't needed.</p>
+		</div>
+		<table class="wiring">
+			<tr><th>Adapter</th><th>Board</th></tr>
+			<tr><td><code>GND</code></td><td><code>GND</code></td></tr>
+			<tr><td><code>RX</code></td><td><code>WTXD</code> (ESP32 transmit)</td></tr>
+			<tr><td><code>TX</code></td><td><code>WRXD</code> (ESP32 receive)</td></tr>
+			<tr><td><code>3V3</code> / <code>5V</code></td><td><strong>not connected</strong></td></tr>
+		</table>
+		<p class="note" style="margin-top:8px">The board is powered by its own power adapter: powering it from the serial adapter's 3.3 V pin isn't enough.</p>
+		<details>
+			<summary>Connectors of the board</summary>
+			<figure>
+				<a href="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/interfaces.jpg"><img src="https://raw.githubusercontent.com/earlynerd/petkit-pura-max-serial-bus/4aeb8a240004b061bfd505dd7671343003c8738a/PCBAs/Main%20Board/interfaces.jpg" alt="T4 main board connectors: display and buttons, drum motor, DC input, waste door motor, hall sensors, proximity and load cell sensors, OLED display" loading="lazy"></a>
+				<figcaption>Board connectors, to check that everything is plugged back in before closing. Photo: <a href="https://github.com/earlynerd/petkit-pura-max-serial-bus/tree/main/PCBAs/Main%20Board">earlynerd</a>, thanks to them, all credit goes to them.</figcaption>
+			</figure>
+		</details>
+		<div class="photo">Photo to add: the three wires connected on a T4-MAIN-V2.3</div>
+	</section>
+
+	<section class="step" id="connect">
+		<h2>3. Download mode and connection</h2>
+		<ol>
+			<li>Plug the USB adapter into the computer.</li>
+			<li><strong>Hold the OK button</strong> (next to the display; it is wired to the ESP32 boot pin, GPIO0), plug the litter box power adapter in, then release the button. The ESP32 starts in download mode: a serial monitor at 115200 baud would show <code>waiting for download</code>.</li>
+			<li>Click <em>Connect</em> and choose the adapter's port.</li>
+		</ol>
+		<div class="tool" id="serial-tool">
+			<h3>Serial connection</h3>
+			<p class="status err" id="serial-unsupported" hidden>This browser has no Web Serial support. Use Chrome or Edge on a computer, or the <code>esptool</code> commands of each step.</p>
+			<div class="row">
+				<label for="baud">Speed</label>
+				<select id="baud">
+					<option value="115200">115200 (slow, safest)</option>
+					<option value="460800" selected>460800</option>
+					<option value="921600">921600 (fast)</option>
+				</select>
+				<button id="connect" type="button">Connect</button>
+				<button id="disconnect" type="button" class="secondary" disabled>Disconnect</button>
+			</div>
+			<p class="status" id="serial-status">Not connected.</p>
+			<details>
+				<summary>Log</summary>
+				<pre class="log" id="serial-log"></pre>
+			</details>
+		</div>
+		<p class="note">Lower the speed if the connection or a transfer fails: long wires and cheap adapters don't always hold 921600 baud.</p>
+	</section>
+
+	<section class="step" id="backup">
+		<h2>4. Back up the stock firmware</h2>
+		<p>Read the <strong>whole 8 MB flash</strong> before anything else. This backup is the only way back to the stock firmware, and it holds the factory weight calibration of your unit, which this page extracts right away. A 4 MB dump isn't enough: the calibration and the second firmware slot are past 4 MB.</p>
+		<div class="tool">
+			<h3>Read the flash</h3>
+			<div class="row">
+				<button id="backup-start" type="button" disabled>Read 8 MB and save</button>
+			</div>
+			<progress id="backup-progress" value="0" max="1" hidden></progress>
+			<p class="status" id="backup-status">Connect first (step 3). It takes about 4 minutes at 460800 baud.</p>
+		</div>
+		<details>
+			<summary>Same thing with esptool</summary>
+			<pre>esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 --before no_reset read_flash 0 0x800000 petkit-t4-stock.bin</pre>
+		</details>
+		<div class="tool">
+			<h3>Already have a backup?</h3>
+			<label class="drop" id="dump-drop">
+				<strong>Drop your stock dump here</strong>
+				<span>or click to choose the <code>.bin</code> file</span>
+				<input type="file" accept=".bin,application/octet-stream" id="dump-file">
+			</label>
+		</div>
+		<div id="calibration"></div>
+		<p class="note">Keep the backup somewhere safe, outside the computer too. The calibration is read with the same checks as <a href="tools/stock-calibration.html">the standalone extractor</a>. The firmware doesn't use these values yet: until it does, the weight is calibrated by hand at step 8.</p>
+	</section>
+
+	<section class="step" id="secrets">
+		<h2>5. Prepare <code>secrets.yaml</code></h2>
+		<p>The firmware reads its passwords and keys from <code>secrets.yaml</code>, next to <code>petkit.yaml</code>. Fill this form to generate it; the calibration lines from step 4 are added when available. Nothing leaves the page.</p>
+		<div class="tool">
+			<label class="field"><span>Wi-Fi network name</span><input type="text" id="wifi-ssid" autocomplete="off"></label>
+			<label class="field"><span>Wi-Fi password</span><input type="password" id="wifi-password" autocomplete="off"></label>
+			<label class="field"><span>Fallback access point name (shown when the Wi-Fi is unreachable)</span><input type="text" id="ap-ssid" value="Petkit T4"></label>
+			<label class="field"><span>Fallback access point password (8 characters or more)</span><input type="text" id="ap-password" autocomplete="off"></label>
+			<label class="field"><span>OTA password (wireless updates)</span><input type="text" id="ota-password" autocomplete="off"></label>
+			<label class="field"><span>Home Assistant API encryption key</span><input type="text" id="api-key" autocomplete="off"></label>
+			<div class="row">
+				<button id="generate" type="button" class="secondary">Generate passwords and key</button>
+			</div>
+			<pre id="secrets-yaml"></pre>
+			<div class="actions" id="secrets-actions"></div>
+		</div>
+		<p class="note">The API key is asked by Home Assistant when adding the device. Keep this file private: it is listed in <code>.gitignore</code>.</p>
+	</section>
+
+	<section class="step" id="compile">
+		<h2>6. Compile the firmware</h2>
+		<p>Compiling needs ESPHome on your computer (or the ESPHome add-on of Home Assistant); a browser can't do it.</p>
+		<ol>
+			<li>Get the project: <pre>git clone https://github.com/Triskae/esphome-petkit-t4.git
+cd esphome-petkit-t4</pre></li>
+			<li>Put the <code>secrets.yaml</code> of step 5 in that folder.</li>
+			<li>Compile: <pre>esphome compile petkit.yaml</pre></li>
+			<li>The image to flash is <code>.esphome/build/petkit-t4/build/firmware.factory.bin</code>. Take the <strong>factory</strong> one: <code>firmware.ota.bin</code> is only for wireless updates.</li>
+		</ol>
+		<p class="note">From the ESPHome dashboard: <em>Install</em> → <em>Manual download</em> → <em>Factory format</em>.</p>
+	</section>
+
+	<section class="step" id="flash">
+		<h2>7. Flash ESPHome</h2>
+		<p>Put the device in download mode again if it was restarted (step 3), and connect.</p>
+		<div class="tool">
+			<h3>Write the firmware</h3>
+			<label class="field"><span>Factory image (<code>firmware.factory.bin</code>)</span><input type="file" id="firmware-file" accept=".bin,application/octet-stream"></label>
+			<p class="status" id="firmware-check"></p>
+			<label class="check"><input type="checkbox" id="backup-confirmed"> <span>I have a complete 8 MB backup of the stock firmware (step 4).</span></label>
+			<label class="check"><input type="checkbox" id="erase-all" checked> <span>Erase the whole flash first (recommended: the stock and ESPHome partition layouts overlap, leftovers of the stock data could prevent ESPHome from starting).</span></label>
+			<div class="row">
+				<button id="flash-start" type="button" disabled>Flash</button>
+			</div>
+			<progress id="flash-progress" value="0" max="1" hidden></progress>
+			<p class="status" id="flash-status"></p>
+		</div>
+		<details>
+			<summary>Same thing with esptool</summary>
+			<pre>esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 --before no_reset erase_flash
+esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 --before no_reset write_flash 0 firmware.factory.bin</pre>
+		</details>
+		<p>When it's done, unplug the litter box power adapter, disconnect the serial wires, and plug it back in.</p>
+	</section>
+
+	<section class="step" id="first-boot">
+		<h2>8. First boot</h2>
+		<ol>
+			<li>The device joins your Wi-Fi. If it can't, it opens the fallback access point of step 5; its display shows a QR code to join it.</li>
+			<li>In Home Assistant, the device is discovered by the ESPHome integration; enter the API key of step 5.</li>
+			<li>Check the diagnostic entities: <code>MCU Handshake</code> turns on within a few seconds, <code>MCU Link Lost</code> stays off, and the drum and flap positions are reported.</li>
+			<li>Calibrate the weight sensor with a known mass, as described in the <a href="https://github.com/Triskae/esphome-petkit-t4#weight-sensor-calibration">README</a>.</li>
+			<li>Close the housing, then try a <em>Level</em> with the cover closed and no pet around before relying on automatic cleaning.</li>
+		</ol>
+		<p>Next updates are wireless: <code>esphome run petkit.yaml</code> uses the OTA password of step 5, no need to open the device again.</p>
+	</section>
+
+	<section class="step" id="restore">
+		<h2>9. Restore the stock firmware</h2>
+		<p>Writing the 8 MB backup back brings the device to the exact state it was in, factory calibration and pairing included.</p>
+		<div class="tool">
+			<h3>Write the backup</h3>
+			<label class="field"><span>Stock backup (8 MB <code>.bin</code>)</span><input type="file" id="restore-file" accept=".bin,application/octet-stream"></label>
+			<p class="status" id="restore-check"></p>
+			<div class="row">
+				<button id="restore-start" type="button" disabled>Restore</button>
+			</div>
+			<progress id="restore-progress" value="0" max="1" hidden></progress>
+			<p class="status" id="restore-status"></p>
+		</div>
+		<details>
+			<summary>Same thing with esptool</summary>
+			<pre>esptool.py --chip esp32 --port /dev/ttyUSB0 --baud 460800 --before no_reset write_flash 0 petkit-t4-stock.bin</pre>
+		</details>
+	</section>
+
+	<section class="step" id="troubleshooting">
+		<h2>10. Troubleshooting</h2>
+		<table>
+			<tr><th>Symptom</th><th>Fix</th></tr>
+			<tr><td><code>Failed to connect</code>, no answer</td><td>Wrong header (use the one next to the ESP32), TX and RX swapped, or the device isn't in download mode: hold OK while plugging the power in.</td></tr>
+			<tr><td>Download mode never starts</td><td>The board must be powered by its own power adapter, not by the serial adapter.</td></tr>
+			<tr><td>A transfer stops halfway</td><td>Lower the speed (step 3), use shorter wires, and make sure the probes don't move.</td></tr>
+			<tr><td>The dump is rejected by the extractor</td><td>Partial dump (4 MB instead of 8 MB) or corrupted read: read it again.</td></tr>
+			<tr><td>No Wi-Fi after flashing</td><td>Join the fallback access point and check the Wi-Fi credentials of <code>secrets.yaml</code>.</td></tr>
+			<tr><td><code>MCU Link Lost</code> on, or <code>MCU Handshake</code> off</td><td>The ESP32 doesn't hear the motor MCU: check the board connectors that were unplugged while opening, then use <em>Reboot MCU</em>.</td></tr>
+		</table>
+		<p>Something else? Open an issue on <a href="https://github.com/Triskae/esphome-petkit-t4/issues">GitHub</a> with your board revision and the device logs.</p>
+	</section>
+</main>
+
+<script src="site/stock-calibration.js"></script>
+<script type="module">
+import { ESPLoader, Transport } from 'https://cdn.jsdelivr.net/npm/esptool-js@0.5.7/bundle.js';
+
+const FLASH_SIZE = 0x800000;  // T4 ESP32 flash, 8 MB
+const READ_CHUNK = 0x40000;   // readFlash() copies its buffer on every packet: read in chunks
+const $ = id => document.getElementById(id);
+
+// ---- Serial connection, shared by the backup, flash and restore tools ----
+
+let transport = null, loader = null, mac = '', busy = false;
+let firmware = null, backup = null;  // images picked for steps 7 and 9
+
+const log = $('serial-log');
+const terminal = {
+	clean() { log.textContent = ''; },
+	writeLine(data) { this.write(data + '\n'); },
+	write(data) {
+		log.textContent += data;
+		log.scrollTop = log.scrollHeight;
+		const found = /MAC: ([0-9a-f:]{17})/i.exec(data);
+		if (found) mac = found[1].replaceAll(':', '');
+	},
+};
+
+function setStatus(element, text, kind = '') {
+	element.textContent = text;
+	element.className = 'status' + (kind ? ' ' + kind : '');
+}
+
+function refreshButtons() {
+	const ready = loader !== null && !busy;
+	$('connect').disabled = loader !== null || busy || !('serial' in navigator);
+	$('disconnect').disabled = !ready;
+	$('backup-start').disabled = !ready;
+	$('flash-start').disabled = !ready || !firmware || !$('backup-confirmed').checked;
+	$('restore-start').disabled = !ready || !backup;
+}
+
+async function connect() {
+	busy = true;
+	refreshButtons();
+	try {
+		const port = await navigator.serial.requestPort();
+		transport = new Transport(port, false);
+		loader = new ESPLoader({ transport, baudrate: Number($('baud').value), romBaudrate: 115200, terminal });
+		setStatus($('serial-status'), 'Connecting…');
+		const chip = await loader.main('no_reset');
+		const sizeKb = await loader.getFlashSize();
+		const size = sizeKb ? `${sizeKb / 1024} MB flash` : 'unknown flash size';
+		setStatus($('serial-status'), `Connected: ${chip}, ${size}.`, sizeKb === 8192 ? 'ok' : 'err');
+		if (sizeKb !== 8192)
+			terminal.writeLine('Warning: a T4 has 8 MB of flash; check that this is the right device.');
+	} catch (error) {
+		if (error.name === 'NotFoundError')  // port picker closed without choosing
+			setStatus($('serial-status'), 'Not connected.');
+		else
+			setStatus($('serial-status'), `Connection failed: ${error.message}. See step 2 and Troubleshooting.`, 'err');
+		await disconnect(true);
+	} finally {
+		busy = false;
+		refreshButtons();
+	}
+}
+
+async function disconnect(quiet = false) {
+	try { await transport?.disconnect(); } catch { /* port already gone */ }
+	transport = loader = null;
+	if (!quiet) setStatus($('serial-status'), 'Not connected.');
+	refreshButtons();
+}
+
+// Runs one serial job, keeping the other tools disabled meanwhile.
+async function run(job) {
+	busy = true;
+	refreshButtons();
+	try {
+		await job();
+	} finally {
+		busy = false;
+		refreshButtons();
+	}
+}
+
+const toHex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+const toBinaryString = bytes => {
+	let out = '';
+	for (let i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+	return out;
+};
+const fromBinaryString = text => Uint8Array.from(text, c => c.charCodeAt(0));
+
+function download(bytes, name) {
+	const link = Object.assign(document.createElement('a'), {
+		href: URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' })), download: name,
+	});
+	link.click();
+	setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+}
+
+// ---- Step 4: backup and calibration ----
+
+let calibration = null;
+
+function showCalibration(name, buffer) {
+	try {
+		const data = extract(buffer);
+		calibration = data.calibration;
+		renderCalibration($('calibration'), name, data);
+	} catch (error) {
+		calibration = null;
+		renderCalibrationError($('calibration'), name, error);
+	}
+	updateSecrets();
+}
+
+async function readBackup() {
+	const status = $('backup-status'), progress = $('backup-progress');
+	progress.hidden = false;
+	try {
+		const flash = new Uint8Array(FLASH_SIZE);
+		for (let addr = 0; addr < FLASH_SIZE; addr += READ_CHUNK) {
+			const chunk = await loader.readFlash(addr, READ_CHUNK, (packet, done) => {
+				progress.value = (addr + done) / FLASH_SIZE;
+				setStatus(status, `Reading… ${Math.floor(progress.value * 100)} %`);
+			});
+			flash.set(chunk, addr);
+		}
+		setStatus(status, 'Verifying…');
+		if (await loader.flashMd5sum(0, FLASH_SIZE) !== toHex(md5(flash)))
+			throw new Error('the data read differs from the flash (MD5 mismatch); read it again, at a lower speed');
+		const name = `petkit-t4-stock${mac ? '-' + mac : ''}.bin`;
+		download(flash, name);
+		setStatus(status, `Backup verified and saved as ${name}.`, 'ok');
+		showCalibration(name, flash.buffer);
+	} catch (error) {
+		setStatus(status, `Backup failed: ${error.message}`, 'err');
+	}
+}
+
+const dumpDrop = $('dump-drop'), dumpFile = $('dump-file');
+const loadDump = async file => file && showCalibration(file.name, await file.arrayBuffer());
+dumpFile.addEventListener('change', () => loadDump(dumpFile.files[0]));
+['dragenter', 'dragover'].forEach(t => dumpDrop.addEventListener(t, e => { e.preventDefault(); dumpDrop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => dumpDrop.addEventListener(t, e => { e.preventDefault(); dumpDrop.classList.remove('over'); }));
+dumpDrop.addEventListener('drop', e => loadDump(e.dataTransfer.files[0]));
+
+// ---- Step 5: secrets.yaml ----
+
+const SECRET_INPUTS = ['wifi-ssid', 'wifi-password', 'ap-ssid', 'ap-password', 'ota-password', 'api-key'];
+const yamlString = value => `'${value.replaceAll("'", "''")}'`;
+
+function randomPassword(length = 16) {
+	const alphabet = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+	return Array.from(crypto.getRandomValues(new Uint8Array(length)), b => alphabet[b % alphabet.length]).join('');
+}
+
+function secretsText() {
+	const value = id => $(id).value;
+	let text = `wifi_ssid: ${yamlString(value('wifi-ssid'))}
+wifi_password: ${yamlString(value('wifi-password'))}
+
+ap_ssid: ${yamlString(value('ap-ssid'))}
+ap_password: ${yamlString(value('ap-password'))}
+
+ota_password: ${yamlString(value('ota-password'))}
+
+api_encryption_key: ${yamlString(value('api-key'))}
+`;
+	if (calibration) text += '\n' + secretsYaml(calibration);
+	return text;
+}
+
+function updateSecrets() {
+	const text = secretsText();
+	$('secrets-yaml').textContent = text;
+	const actions = $('secrets-actions');
+	actions.replaceChildren(copyButton('Copy', text));
+	const save = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Download secrets.yaml', className: 'secondary' });
+	save.onclick = () => download(new TextEncoder().encode(text), 'secrets.yaml');
+	actions.append(save);
+}
+
+$('generate').addEventListener('click', () => {
+	for (const id of ['ap-password', 'ota-password'])
+		if (!$(id).value) $(id).value = randomPassword();
+	if (!$('api-key').value)
+		$('api-key').value = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32))));
+	updateSecrets();
+});
+SECRET_INPUTS.forEach(id => $(id).addEventListener('input', updateSecrets));
+
+// ---- Steps 7 and 9: flash and restore ----
+
+// An ESP32 factory image: bootloader at 0x1000 and partition table at 0x8000.
+function checkFactoryImage(bytes) {
+	if (bytes[0] === 0xE9) throw new Error('this is an OTA image; take firmware.factory.bin');
+	if (bytes.length <= 0x8000 || bytes[0x1000] !== 0xE9 || bytes[0x8000] !== 0xAA || bytes[0x8001] !== 0x50)
+		throw new Error('not an ESP32 factory image (no bootloader or partition table)');
+	if (bytes.length > FLASH_SIZE) throw new Error('larger than the 8 MB flash');
+}
+
+function checkBackup(bytes) {
+	if (bytes.length !== FLASH_SIZE) throw new Error(`a full backup is exactly 8 MB, this file is ${bytes.length} bytes`);
+	if (bytes[0x8000] !== 0xAA || bytes[0x8001] !== 0x50) throw new Error('no partition table at 0x8000');
+}
+
+async function pickFile(input, check, statusId, label) {
+	const file = input.files[0];
+	if (!file) return null;
+	const bytes = new Uint8Array(await file.arrayBuffer());
+	try {
+		check(bytes);
+		setStatus($(statusId), `${file.name}: ${label}, ${bytes.length.toLocaleString('en-US')} bytes.`, 'ok');
+		return bytes;
+	} catch (error) {
+		setStatus($(statusId), `${file.name}: ${error.message}.`, 'err');
+		return null;
+	}
+}
+
+$('firmware-file').addEventListener('change', async e => {
+	firmware = await pickFile(e.target, checkFactoryImage, 'firmware-check', 'factory image');
+	refreshButtons();
+});
+$('restore-file').addEventListener('change', async e => {
+	backup = await pickFile(e.target, checkBackup, 'restore-check', 'full backup');
+	refreshButtons();
+});
+$('backup-confirmed').addEventListener('change', refreshButtons);
+
+async function write(bytes, eraseAll, progressId, statusId) {
+	const status = $(statusId), progress = $(progressId);
+	progress.hidden = false;
+	progress.value = 0;
+	try {
+		setStatus(status, eraseAll ? 'Erasing the flash (up to a minute)…' : 'Writing…');
+		await loader.writeFlash({
+			fileArray: [{ data: toBinaryString(bytes), address: 0 }],
+			flashSize: 'keep', flashMode: 'keep', flashFreq: 'keep', eraseAll, compress: true,
+			reportProgress: (index, written, total) => {
+				progress.value = written / total;
+				setStatus(status, `Writing… ${Math.floor(progress.value * 100)} %`);
+			},
+			calculateMD5Hash: image => toHex(md5(fromBinaryString(image))),
+		});
+		setStatus(status, 'Written and verified. Unplug the power adapter, remove the wires, and plug it back in.', 'ok');
+	} catch (error) {
+		setStatus(status, `Write failed: ${error.message}. The device is still in download mode: try again.`, 'err');
+	}
+}
+
+$('connect').addEventListener('click', connect);
+$('disconnect').addEventListener('click', () => disconnect());
+$('backup-start').addEventListener('click', () => run(readBackup));
+$('flash-start').addEventListener('click', () => run(() => write(firmware, $('erase-all').checked, 'flash-progress', 'flash-status')));
+$('restore-start').addEventListener('click', () => run(() => write(backup, false, 'restore-progress', 'restore-status')));
+
+if (!('serial' in navigator)) $('serial-unsupported').hidden = false;
+updateSecrets();
+refreshButtons();
+</script>
+</body>
+</html>
