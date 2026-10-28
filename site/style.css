@@ -86,3 +86,13 @@ svg.board .pin { fill: #3ddc84; font: 600 22px system-ui, sans-serif; text-ancho
 .key { display: inline-block; width: 12px; height: 12px; border-radius: 3px; border: 3px solid; vertical-align: -1px; }
 .key.ok { border-color: #3ddc84; }
 .key.bad { border-color: #ff5a5a; border-style: dashed; }
+.dump-slots { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.dump-slots .drop { padding: 20px 12px; }
+.dump-slots span { display: block; font-size: .85rem; color: var(--muted); word-break: break-all; }
+.drop.loaded { border-style: solid; border-color: var(--ok); }
+.verdict { border-radius: 8px; padding: 12px 16px; font-weight: 600; }
+.verdict.ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.verdict.wait { background: var(--code); color: var(--text); }
+.verdict.err { background: color-mix(in srgb, var(--err) 15%, transparent); color: var(--err); }
+.verdict p { margin: 4px 0 0; font-weight: 400; color: inherit; }
+@media (max-width: 560px) { .dump-slots { grid-template-columns: 1fr; } }
