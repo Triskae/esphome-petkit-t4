@@ -20,7 +20,7 @@ Each row is labeled **confirmed** (code + hardware), **static** (code only) or *
 | 1 | node 0: status bits; node 1: sensor words | yes |
 | 2 | motor configuration echo (10 bytes) | yes |
 | 3 | motor status (14 bytes) | yes |
-| 4 | motor parameter block readback (11 bytes) | yes, at init |
+| 4 | motor parameter block readback (11 bytes) | yes, after an MCU reboot; this component compares it with the block sent at init and logs `Drum/Tray motor parameters confirmed by the MCU`, or a warning with both values when they differ |
 | 5 | 18-byte motor block, cached only | never |
 | 6 | ignored | never |
 | 7 | weight samples, into a FIFO | yes |

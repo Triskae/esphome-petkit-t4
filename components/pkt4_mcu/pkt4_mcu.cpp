@@ -6,6 +6,17 @@ namespace esphome {
 namespace pkt4_mcu {
 
 static const char *const TAG = "pkt4_mcu";
+static const char *const MOTOR_NAMES[2] = {"Drum", "Tray"};
+
+// Motor parameter block (type 4) sent at init as stock (FUN_401272e8); meaning not established (thresholds?).
+struct __attribute__((packed)) MotorParams {
+	uint8_t unk[3];
+	uint16_t value[4];
+};
+static const MotorParams MOTOR_PARAMS[2] = {
+	{{0, 0, 0}, {1500, 200, 30, 20}},
+	{{0, 0, 0}, {1300, 200, 30, 20}},
+};
 
 void PKT4MCUComponent::setup() {
 	ESP_LOGCONFIG(TAG, "Setting up T4 MCU...");
@@ -245,6 +256,22 @@ void PKT4MCUComponent::handle_packet_() {
 			if (auto *s = this->motor_stop_code_sensor_[node->node]) s->publish_state(data->scram);
 		}; break;
 
+		case 0x4: {  // the MCU sends back the motor parameter block set at init
+			if (node->node > 1 || this->packet_.len != offsetof(MCUPacket, payload) + 1 + sizeof(MotorParams) + sizeof(crc_in)) {
+				ESP_LOGW(TAG, "Invalid motor parameters: node %u, len %u", node->node, this->packet_.len);
+				break;
+			}
+			const MotorParams *data = (const MotorParams*)node->data;
+			const char *name = MOTOR_NAMES[node->node];
+			if (!memcmp(data, &MOTOR_PARAMS[node->node], sizeof(MotorParams)))
+				ESP_LOGD(TAG, "%s motor parameters confirmed by the MCU", name);
+			else
+				ESP_LOGW(TAG, "%s motor parameters differ from those sent: %u %u %u %u (sent %u %u %u %u)", name,
+				         data->value[0], data->value[1], data->value[2], data->value[3],
+				         MOTOR_PARAMS[node->node].value[0], MOTOR_PARAMS[node->node].value[1],
+				         MOTOR_PARAMS[node->node].value[2], MOTOR_PARAMS[node->node].value[3]);
+		}; break;
+
 		case 0x9: {
 			switch (node->node) {
 				case 0x0: {
@@ -280,11 +307,11 @@ void PKT4MCUComponent::handle_packet_() {
 					uint8_t buf_D1[] = {0x01, 0x02, 0xFF, 0x0A, 0x00, 0x1E, 0x00, 0x06};
 					this->send_(0xD, buf_D1, sizeof(buf_D1));
 
-					uint8_t buf_40[] = {0x00, 0x00, 0x00, 0x00, 0xDC, 0x05, 0xC8, 0x00, 0x1E, 0x00, 0x14, 0x00};
-					this->send_(0x4, buf_40, sizeof(buf_40));
-
-					uint8_t buf_41[] = {0x01, 0x00, 0x00, 0x00, 0x14, 0x05, 0xC8, 0x00, 0x1E, 0x00, 0x14, 0x00};
-					this->send_(0x4, buf_41, sizeof(buf_41));
+					for (uint8_t motor = 0; motor < 2; motor++) {
+						uint8_t buf_4[1 + sizeof(MotorParams)] = {motor};
+						memcpy(buf_4 + 1, &MOTOR_PARAMS[motor], sizeof(MotorParams));
+						this->send_(0x4, buf_4, sizeof(buf_4));
+					}
 
 					this->send_(0x0, (uint8_t*)(uint8_t[]){0x00, 0}, 2);
 
