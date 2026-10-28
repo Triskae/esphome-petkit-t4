@@ -20,7 +20,7 @@ Each row is labeled **confirmed** (code + hardware), **static** (code only) or *
 | 1 | node 0: status bits; node 1: sensor words | yes |
 | 2 | motor configuration echo (10 bytes) | yes |
 | 3 | motor status (14 bytes) | yes |
-| 4 | motor parameter block readback (11 bytes) | yes, after an MCU reboot; this component compares it with the block sent at init and logs `Drum/Tray motor parameters confirmed by the MCU`, or a warning with both values when they differ. Seen on 28 October 2026: drum confirmed, tray read back as `1200, 20, 20, 20` instead of `1300, 200, 30, 20` (meaning unknown) |
+| 4 | motor parameter block readback (11 bytes) | yes, after an MCU reboot; this component compares it with the block sent at init and logs `Drum/Tray motor parameters confirmed by the MCU`, or a warning with both values when they differ. `1200, 20, 20, 20` for either motor is the MCU default: the readback can be sent before the block written at init is applied (seen on the tray on 28 October 2026, and on the drum in the stock captures) |
 | 5 | 18-byte motor block, cached only | never |
 | 6 | ignored | never |
 | 7 | weight samples, into a FIFO | yes |
@@ -100,6 +100,19 @@ What this component does:
 |---|---|
 | error `mcu` after 15 s without any frame | `MCU Link Lost` (problem) turns on after 15 s without any valid frame, of any type, and off at the next one; an error is logged. Diagnostic only, nothing is stopped |
 | weekly MCU reboot (type 0xA), then `mcu init` | checked every hour: once the last reboot (`MCU Last Reboot`, stored across ESP reboots, UTC from Home Assistant time) is 7 days old, the MCU is rebooted with the same frame. The MCU then announces its version again and the usual init sequence runs. The reboot waits until the litter box is idle (no cleaning, maintenance, manual move, leveling, open flap, pet in front or inside) and the link is up. The status bits are ignored for 2 s after the reboot: on the first test (28 October 2026, 13:07) the MCU re-initialized within 0.2 s, but its first status reported `Drum Down` while the drum was level, which started a leveling (flap opened and closed, drum still). The 7 days count from the first run after flashing; a clock going back restarts the count instead of rebooting. `Reboot MCU` does it at once, with the same idle checks |
+
+## Motor parameter block (type 4)
+
+The 11-byte block written at init (`{0,0,0, 1500/1300, 200, 30, 20}`, meaning not established) is sent back by the MCU on its own after an MCU reboot, one frame per motor. Tests on 28 October 2026:
+
+| Time | Frame | Data |
+|---|---|---|
+| 13:24:30 | readback during init | drum: our values; tray: `1200, 20, 20, 20` (MCU default) |
+| 13:30:19 | answer to a **read request** sent 2 s later (`04` with node `0x81`) | tray: our values, so the write had been applied |
+| 13:30:19 | answer to a **read request** for the drum (node `0x80`) | `54 3F 77 6F 00 DC 01 00 00 00 00`: starts with the CRC of our request, then garbage |
+| 13:32:24 | readbacks after an MCU reboot, init only | both motors: our values |
+
+The stock firmware never reads this block, and the MCU apparently handles a read of it as a write of whatever follows the node byte: **do not send type 4 read requests**. An MCU reboot (`Reboot MCU`) restores the defaults and the init writes the block again.
 
 ## MCU version (type 9)
 

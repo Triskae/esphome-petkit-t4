@@ -17,6 +17,9 @@ static const MotorParams MOTOR_PARAMS[2] = {
 	{{0, 0, 0}, {1500, 200, 30, 20}},
 	{{0, 0, 0}, {1300, 200, 30, 20}},
 };
+// Block the MCU reports until it applies the one sent at init (also seen in the stock captures). Never read the block
+// to check it: the MCU handles a type 4 read like a write (docs/mcu-protocol.md).
+static const MotorParams MCU_DEFAULT_PARAMS = {{0, 0, 0}, {1200, 20, 20, 20}};
 
 void PKT4MCUComponent::setup() {
 	ESP_LOGCONFIG(TAG, "Setting up T4 MCU...");
@@ -273,6 +276,8 @@ void PKT4MCUComponent::handle_packet_() {
 			const char *name = MOTOR_NAMES[node->node];
 			if (!memcmp(data, &MOTOR_PARAMS[node->node], sizeof(MotorParams)))
 				ESP_LOGD(TAG, "%s motor parameters confirmed by the MCU", name);
+			else if (!memcmp(data, &MCU_DEFAULT_PARAMS, sizeof(MotorParams)))
+				ESP_LOGD(TAG, "%s motor parameters: MCU defaults, reported before the block sent at init was applied", name);
 			else
 				ESP_LOGW(TAG, "%s motor parameters differ from those sent: %u %u %u %u (sent %u %u %u %u)", name,
 				         data->value[0], data->value[1], data->value[2], data->value[3],
