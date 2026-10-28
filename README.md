@@ -140,6 +140,6 @@ Pets:
 
 ## Thanks to:
 
+- @egormanga for the [original firmware](https://github.com/egormanga/esphome-petkit-t4) this fork builds on.
 - @earlynerd with his [repo](https://github.com/earlynerd/petkit-pura-max-serial-bus) for the pioneering and _enormous_ help in the reverse engineering.
 - @dwyschka for the idea and the upstart (earlynerd/petkit-pura-max-serial-bus#1).
-- My loved girlfriend Sharea & my lovely kitty Xayah for the lots of testing.
