@@ -78,7 +78,7 @@ Other abnormal motor stops are handled as stock ([details](docs/motion.md#abnorm
 6. Place the weight again and check for its weight drift, re-input the value if needed (you might need to add/remove a trailing non-significant zero in order for the value to be actually sent and saved).
 7. Rinse, repeat as desired (a perfect 0.01 kg precision is known to be reachable on T4).
 
-The factory calibration of each unit can be extracted from a stock flash dump with [`tools/extract_stock_calibration.py`](tools/extract_stock_calibration.py); it is not used by the firmware yet ([details](docs/stock-calibration.md)).
+The factory calibration of each unit can be extracted from a stock flash dump with [`tools/extract_stock_calibration.py`](tools/extract_stock_calibration.py), or in a browser by dropping the dump on [`tools/stock-calibration.html`](tools/stock-calibration.html); it is not used by the firmware yet ([details](docs/stock-calibration.md)).
 
 
 ## Documentation
@@ -86,7 +86,7 @@ The factory calibration of each unit can be extracted from a stock flash dump wi
 - [docs/cleaning.md](docs/cleaning.md): automatic cleaning decision, full waste bin, comparison with the stock firmware.
 - [docs/motion.md](docs/motion.md): drum and flap commands, destinations, abnormal stops, fixes and hardware tests.
 - [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
-- [docs/stock-calibration.md](docs/stock-calibration.md): factory weight calibration and the tool that extracts it from a stock flash dump.
+- [docs/stock-calibration.md](docs/stock-calibration.md): factory weight calibration and the tools (Python script, browser page) that extract it from a stock flash dump.
 
 
 ## Roadmap
@@ -127,6 +127,7 @@ MCU link ([docs/mcu-protocol.md](docs/mcu-protocol.md)):
 Weight ([docs/stock-calibration.md](docs/stock-calibration.md)):
 * [x] Weight as additional safety check
 * [x] Dumping the stock calibration data from factory binaries (per-chip)
+* [x] Browser page that extracts the stock calibration from a dump, no Python needed
 * [ ] Use the extracted values for the weight (stock two-range conversion; validate with known masses before replacing the current calibration)
 * [ ] Automated calibration
 * [ ] Residual weight sits around -15 to -22 g after cleanings
