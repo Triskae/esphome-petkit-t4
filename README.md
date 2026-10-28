@@ -65,7 +65,7 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Weekly MCU reboot (stock, packet `0xA`)
   * [ ] Identify stock settings `0x12`, `0x23` and `3`, and the remaining stop codes (`4`; `5` = stall and `18` = close timeout are known)
 * [ ] Weight:
-  * [ ] Weight reference rebasing like stock (now only simulated by the shadow sensors), with the deposit measured when the pet leaves, before the reference absorbs it (see [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md))
+  * [ ] Weight reference rebasing like stock, with the deposit measured when the pet leaves, before the reference absorbs it. Low priority: cleanings no longer depend on the weight, only `Waste Collected` would benefit. The read-only simulation once added for it was removed (commit `86c2ef6`)
   * [ ] Residual weight sits around -15 to -22 g after cleanings
   * [ ] Detect the waste bin removal (not reported on T4-MAIN-V2.3; `Bin Emptied` button meanwhile)
 
@@ -106,7 +106,6 @@ A full waste bin is detected like the stock firmware does, when the waste flap f
 - [docs/motion.md](docs/motion.md): drum commands, destinations, before/after, hardware tests.
 - [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
 - [docs/stock-calibration.md](docs/stock-calibration.md): factory weight calibration and the tool that extracts it from a stock flash dump.
-- [docs/weight-reference-shadow.md](docs/weight-reference-shadow.md): diagnostic simulation of the stock weight reference rebasing.
 
 
 ## Weight Sensor Calibration

@@ -1,6 +1,6 @@
 # ESP32 ↔ MCU protocol notes
 
-Findings from the stock ESP32 application (`PK_T4 V1.431-80-g5532d38`, SHA256 `6e3263521cfad147b645c69245add407dba73df82b6575a7ab27aa13ea05c0b1`), cross-checked with earlynerd's public bus captures and with captures on a PURA MAX first generation (T4-MAIN-V2.3), 26 October 2026. Addresses refer to that image only. See also [motion.md](motion.md) for the drum commands and [weight-reference-shadow.md](weight-reference-shadow.md).
+Findings from the stock ESP32 application (`PK_T4 V1.431-80-g5532d38`, SHA256 `6e3263521cfad147b645c69245add407dba73df82b6575a7ab27aa13ea05c0b1`), cross-checked with earlynerd's public bus captures and with captures on a PURA MAX first generation (T4-MAIN-V2.3), 26 October 2026. Addresses refer to that image only. See also [motion.md](motion.md) for the drum commands.
 
 Each row is labeled **confirmed** (code + hardware), **static** (code only) or **inferred**.
 

@@ -115,7 +115,6 @@ time:
     update_interval: never
 
   - platform: homeassistant
-    id: ha_time
     on_time_sync:
       bm8563.write_time:
 
@@ -126,14 +125,9 @@ rtttl:
 substitutions:
   ap_ssid: !secret ap_ssid
   ap_password: !secret ap_password
-  # Extracted from this device's stock dump; diagnostic counters only.
   # Any move is forbidden during an OTA or with Block Movement on. Read the states directly: the
   # Movement Blocked sensor may not be refreshed yet when Block Movement's own triggers run.
   movement_blocked: 'id(ota_state) || id(block_movement).state'
-  shadow_stock_zero: '7217189'
-  shadow_stock_midpoint: '6557189'
-  shadow_stock_low_slope: '66'
-  shadow_stock_high_slope: '65'
 
 qr_code:
   id: qrcode_ap
@@ -319,11 +313,6 @@ globals:
   - id: cleaned_at
     type: long
 
-  - id: weight_reference_observer
-    type: esphome::pkt4_mcu::WeightReferenceObserver
-    initial_value: 'esphome::pkt4_mcu::WeightReferenceObserver(${shadow_stock_zero}, ${shadow_stock_midpoint}, ${shadow_stock_low_slope}, ${shadow_stock_high_slope})'
-    restore_value: no
-
 pkt4_mcu:
   id: mcu
 
@@ -418,51 +407,6 @@ sensor:
         - clamp:
             max_value: 10
         - delta: 0.5
-    # Internal stream: one callback per original ADC sample, not per average.
-    weight_sample:
-      id: weight_sample_shadow
-      internal: true
-      filters:
-        - lambda: return {};  # Raw callback only; no per-sample frontend output.
-      on_raw_value:
-        then:
-          - lambda: |-
-              using Observer = esphome::pkt4_mcu::WeightReferenceObserver;
-              const uint32_t raw = std::isfinite(x) && x >= 1 && x <= 0xFFFFFF
-                ? static_cast<uint32_t>(x) : 0;
-              const Observer::Measurement measurement{
-                raw, id(weight_zero), id(weight_scale),
-                id(litter_mass) + id(waste_collected),
-                id(pet_weight).has_state() ? id(pet_weight).state : NAN,
-                id(clean_threshold).state / 1000.f, id(pet_threshold).state};
-              const Observer::State state{
-                id(pet_inside).has_state() && id(cover).has_state() &&
-                  id(drum_level).has_state() && id(tray).has_state(),
-                id(pet_inside).state,
-                id(clean).state || id(maintenance).state || id(level_needed) ||
-                  id(motor_drum_up).state || id(motor_drum_down).state || id(tray).state,
-                id(cover).state, id(drum_level).state,
-                id(clean_if_needed).is_running() || id(cleans_left) > 0,
-                bool(id(ota_state))};
-              if (id(weight_reference_observer).observe(measurement, state, millis())) {
-                const auto &event = id(weight_reference_observer).last_event();
-                auto now = id(ha_time).now();
-                const std::string stamp = now.is_valid()
-                  ? now.strftime("%Y-%m-%d %H:%M:%S %z")
-                  : str_sprintf("uptime:%us", unsigned(millis() / 1000));
-                char message[230];
-                snprintf(message, sizeof(message),
-                  "%s %s real=%.1fg before=%.1fg after=%.1fg threshold=%.1fg clear=%s pending=%s",
-                  stamp.c_str(), Observer::decision_name(event.decision),
-                  event.actual * 1000, event.before * 1000, event.after * 1000,
-                  measurement.clean_threshold * 1000,
-                  event.would_clear_threshold ? "yes" : "no",
-                  event.clean_pending ? "yes" : "no");
-                id(reference_last_decision_shadow).publish_state(message);
-                ESP_LOGD("weight_reference_shadow", "%s", message);
-                if (event.decision == Observer::Decision::UPDATED)
-                  id(reference_last_update_shadow).publish_state(stamp);
-              }
     weight:
       id: weight
       name: Weight
@@ -605,120 +549,6 @@ sensor:
     update_interval: 1s
     lambda: return id(cleans_left);
 
-  # Read-only approximation; see docs/weight-reference-shadow.md.
-  - platform: template
-    name: Weight Reference Shadow
-    entity_category: diagnostic
-    unit_of_measurement: kg
-    device_class: weight
-    state_class: measurement
-    accuracy_decimals: 3
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).reference();
-    filters:
-      - delta: 0.001
-
-  - platform: template
-    name: Residual Weight Shadow
-    entity_category: diagnostic
-    unit_of_measurement: g
-    device_class: weight
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: 1s
-    lambda: |-
-      if (!id(weight_reference_observer).fresh(millis())) return NAN;
-      return id(weight_reference_observer).residual() * 1000;
-    filters:
-      - delta: 1
-
-  - platform: template
-    name: Weight Drift Shadow
-    entity_category: diagnostic
-    unit_of_measurement: g
-    device_class: weight
-    state_class: measurement
-    accuracy_decimals: 1
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).correction() * 1000;
-    filters:
-      - delta: 1
-
-  - platform: template
-    name: Reference Stability Shadow
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).samples();
-
-  - platform: template
-    name: Reference Required Samples Shadow
-    entity_category: diagnostic
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).required();
-
-  - platform: template
-    name: Reference Updates Shadow
-    entity_category: diagnostic
-    state_class: total_increasing
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).updates();
-    filters:
-      - delta: 0
-
-  - platform: template
-    name: Reference Samples Seen Shadow
-    entity_category: diagnostic
-    state_class: total_increasing
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).seen();
-
-  - platform: template
-    name: Reference Attempts Shadow
-    entity_category: diagnostic
-    state_class: total_increasing
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).attempts();
-
-  - platform: template
-    name: Reference Blocked Attempts Shadow
-    entity_category: diagnostic
-    state_class: total_increasing
-    accuracy_decimals: 0
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).blocked();
-
-  - platform: template
-    name: Reference Last Actual Residual Shadow
-    entity_category: diagnostic
-    unit_of_measurement: g
-    device_class: weight
-    accuracy_decimals: 1
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).last_event().actual * 1000;
-
-  - platform: template
-    name: Reference Last Residual Before Shadow
-    entity_category: diagnostic
-    unit_of_measurement: g
-    device_class: weight
-    accuracy_decimals: 1
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).last_event().before * 1000;
-
-  - platform: template
-    name: Reference Last Residual After Shadow
-    entity_category: diagnostic
-    unit_of_measurement: g
-    device_class: weight
-    accuracy_decimals: 1
-    update_interval: 1s
-    lambda: return id(weight_reference_observer).last_event().after * 1000;
-
   - platform: pulse_counter
     id: mcu_interrupts
     pin:
@@ -788,52 +618,7 @@ text_sensor:
       if (!id(motor_error)) return {"None"};
       return {esphome::pkt4_mcu::stop_reason(id(motor_error))};
 
-  - platform: template
-    id: reference_last_update_shadow
-    name: Reference Last Update Shadow
-    entity_category: diagnostic
-    icon: mdi:clock-check-outline
-    update_interval: never
-
-  - platform: template
-    id: reference_last_decision_shadow
-    name: Reference Last Decision Shadow
-    entity_category: diagnostic
-    update_interval: never
-
-  - platform: template
-    name: Reference Status Shadow
-    entity_category: diagnostic
-    update_interval: 1s
-    lambda: return {id(weight_reference_observer).status(millis())};
-
-  - platform: template
-    name: Reference Model Scope Shadow
-    entity_category: diagnostic
-    update_interval: 60s
-    lambda: return {"Stock idle block + barrel detector; ESPHome presence/process"};
-
 binary_sensor:
-  - platform: template
-    name: Reference Commit Allowed Shadow
-    entity_category: diagnostic
-    lambda: return id(weight_reference_observer).commit_allowed(millis());
-
-  - platform: template
-    name: Reference Would Clear Threshold Shadow
-    entity_category: diagnostic
-    lambda: return id(weight_reference_observer).last_event().would_clear_threshold;
-
-  - platform: template
-    name: Barrel Removed Shadow
-    entity_category: diagnostic
-    lambda: return id(weight_reference_observer).barrel_out();
-
-  - platform: template
-    name: Reference Eligible Shadow
-    entity_category: diagnostic
-    lambda: return id(weight_reference_observer).eligible(millis());
-
   - platform: pkt4_mcu
     approach:
       id: approach

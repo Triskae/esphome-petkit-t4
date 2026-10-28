@@ -1,6 +1,6 @@
 # Stock weight calibration
 
-> **Disclaimer:** the extracted values are not used by the firmware yet. `Weight` still relies on the component's own calibration; only the shadow diagnostics carry the stock values as constants. Using them is in the todo list.
+> **Disclaimer:** the extracted values are not used by the firmware yet. `Weight` still relies on the component's own calibration. Using them is in the todo list.
 
 Each T4 is calibrated at the factory. The stock firmware keeps that calibration in the NVS partition `user_calibrt`, namespace `T4`, key `data`: a 20-byte blob of five little-endian 32-bit integers.
 
@@ -26,4 +26,4 @@ Options: `--partition`, `--namespace`, `--key`, and `--table-offset 0x8000` when
 
 ## How it is used
 
-Only the shadow weight-reference diagnostics use these values for now (substitutions `shadow_stock_*` in `petkit.yaml`, see [weight-reference-shadow.md](weight-reference-shadow.md)). The real `Weight` still uses the component's own calibration (`Weight Calibration Zero` and `Weight Calibration`). Don't replace that zero with `zero_raw` as is: the factory zero is the bare load cells, while the assembled device, the drum and the litter add their own tare. Using the two-range stock conversion for the weight is in the todo list.
+Nothing uses these values for now. `Weight` uses the component's own calibration (`Weight Calibration Zero` and `Weight Calibration`). Don't replace that zero with `zero_raw` as is: the factory zero is the bare load cells, while the assembled device, the drum and the litter add their own tare. Using the two-range stock conversion for the weight is in the todo list.

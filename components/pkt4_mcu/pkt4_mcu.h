@@ -1,7 +1,5 @@
 #pragma once
 
-#include "weight_reference_observer.h"
-
 #include <esphome/core/component.h>
 #include <esphome/components/binary_sensor/binary_sensor.h>
 #include <esphome/components/sensor/sensor.h>
@@ -43,7 +41,6 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 
 		void set_distance_sensor(sensor::Sensor *distance_sensor) { this->distance_sensor_ = distance_sensor; }
 		void set_weight_sensor(sensor::Sensor *weight_sensor) { this->weight_sensor_ = weight_sensor; }
-		void set_weight_sample_sensor(sensor::Sensor *sensor) { this->weight_sample_sensor_ = sensor; }
 		void set_approach_sensor(binary_sensor::BinarySensor *approach_sensor) { this->approach_sensor_ = approach_sensor; }
 		void set_bin_sensor(binary_sensor::BinarySensor *bin_sensor) { this->bin_sensor_ = bin_sensor; }
 		void set_cover_sensor(binary_sensor::BinarySensor *cover_sensor) { this->cover_sensor_ = cover_sensor; }
@@ -77,8 +74,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void handle_packet_();
 
 		sensor::Sensor *distance_sensor_{nullptr},
-		               *weight_sensor_{nullptr},
-		               *weight_sample_sensor_{nullptr};
+		               *weight_sensor_{nullptr};
 		sensor::Sensor *motor_position_sensor_[2]{},
 		               *motor_stop_code_sensor_[2]{},
 		               *motor_current_sensor_[2]{};

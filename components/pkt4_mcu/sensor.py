@@ -17,8 +17,6 @@ from . import PKT4MCUComponent
 
 DEPENDENCIES = ('pkt4_mcu',)
 
-CONF_WEIGHT_SAMPLE = 'weight_sample'
-
 MOTORS = {'drum': 0, 'tray': 1}
 MOTOR_SENSORS = {
 	# key suffix: (setter, schema)
@@ -54,7 +52,6 @@ CONFIG_SCHEMA = cv.Schema({
 		device_class=DEVICE_CLASS_WEIGHT,
 		state_class=STATE_CLASS_MEASUREMENT,
 	),
-	cv.Optional(CONF_WEIGHT_SAMPLE): sensor.sensor_schema(accuracy_decimals=0),
 	**{cv.Optional(f'{motor}_{key}'): schema for motor in MOTORS for key, (_, schema) in MOTOR_SENSORS.items()},
 })
 
@@ -69,10 +66,6 @@ async def to_code(config):
 	if weight_config := config.get(CONF_WEIGHT):
 		sens = await sensor.new_sensor(weight_config)
 		cg.add(var.set_weight_sensor(sens))
-
-	if sample_config := config.get(CONF_WEIGHT_SAMPLE):
-		sens = await sensor.new_sensor(sample_config)
-		cg.add(var.set_weight_sample_sensor(sens))
 
 	for motor, index in MOTORS.items():
 		for key, (setter, _) in MOTOR_SENSORS.items():
