@@ -292,6 +292,15 @@ globals:
   - id: smoothing  # a plain leveling is on its way to smooth: passing level isn't its end
     type: bool
 
+  - id: motor_error  # stop code of a failed drum move (0: none); blocks cleanings until cleared
+    type: int
+
+  - id: drum_stall_retries
+    type: int
+
+  - id: tray_close_retried
+    type: bool
+
   - id: bin_full  # the waste flap failed to close: cleared only by emptying the bin
     type: bool
     restore_value: yes
@@ -311,6 +320,7 @@ globals:
     restore_value: no
 
 pkt4_mcu:
+  id: mcu
 
 sensor:
   - platform: pkt4_mcu
@@ -318,14 +328,75 @@ sensor:
     drum_position:
       name: Drum Position
     drum_stop_code:
+      id: drum_stop_code
       name: Drum Stop Code
+      on_value:  # abnormal ends only; normal moves end with 0 or 1
+        - if:
+            condition:
+              lambda: return x == 4;  # stall: stock backs off and retries (FUN_4011d300)
+            then:
+              script.execute: drum_stall
+        - if:
+            condition:
+              lambda: return x == 17 || x == 18;  # timeout: stock stops the process with an error
+            then:
+              - globals.set:
+                  id: motor_error
+                  value: !lambda return x;
+              - if:
+                  condition:
+                    switch.is_on: clean
+                  then:
+                    switch.turn_off: clean
     drum_current:
       name: Drum Current
       disabled_by_default: yes
     tray_position:
+      id: tray_position
       name: Tray Position
     tray_stop_code:
+      id: tray_stop_code
       name: Tray Stop Code
+      on_value:  # end of a flap close (position is published just before)
+        if:
+          condition:
+            lambda: return id(mcu).last_direction(1) == 2;
+          then:
+            if:
+              condition:
+                lambda: return id(tray_position).state == 9;  # closed
+              then:
+                globals.set:
+                  id: tray_close_retried
+                  value: 'false'
+              else:
+                if:
+                  all:  # a close interrupted on purpose (cover opened, bin removed, maintenance) doesn't mean a full bin
+                    - binary_sensor.is_off: cover
+                    - binary_sensor.is_off: bin
+                    - switch.is_off: maintenance
+                  then:
+                    if:
+                      condition:
+                        lambda: return !id(tray_close_retried);
+                      then:  # stock retries the flap before concluding (cause 5): reopen, level_if_needed closes it again
+                        - globals.set:
+                            id: tray_close_retried
+                            value: 'true'
+                        - pkt4_mcu.motor:
+                            motor: tray
+                            direction: open
+                            speed: 100
+                            mode: time
+                            timeout: 80
+                            pos: open
+                      else:
+                        - globals.set:
+                            id: tray_close_retried
+                            value: 'false'
+                        - globals.set:
+                            id: bin_full
+                            value: 'true'
     distance:
       name: Distance
       entity_category: diagnostic
@@ -679,6 +750,40 @@ sensor:
 
 text_sensor:
   - platform: template
+    name: Drum Stop Reason
+    icon: mdi:information-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static float published = NAN;  // publish only on change
+      if (!id(drum_stop_code).has_state() || id(drum_stop_code).state == published) return {};
+      published = id(drum_stop_code).state;
+      return {esphome::pkt4_mcu::stop_reason(published)};
+
+  - platform: template
+    name: Tray Stop Reason
+    icon: mdi:information-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static float published = NAN;  // publish only on change
+      if (!id(tray_stop_code).has_state() || id(tray_stop_code).state == published) return {};
+      published = id(tray_stop_code).state;
+      return {esphome::pkt4_mcu::stop_reason(published)};
+
+  - platform: template
+    name: Motor Error Reason
+    icon: mdi:alert-circle-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static int published = -1;  // publish only on change
+      if (id(motor_error) == published) return {};
+      published = id(motor_error);
+      if (!id(motor_error)) return {"None"};
+      return {esphome::pkt4_mcu::stop_reason(id(motor_error))};
+
+  - platform: template
     id: reference_last_update_shadow
     name: Reference Last Update Shadow
     entity_category: diagnostic
@@ -782,16 +887,6 @@ binary_sensor:
       id: tray_close_failed
       name: Tray Close Failed
       entity_category: diagnostic
-      on_press:
-        if:
-          all:  # a close interrupted on purpose (cover opened, bin removed, maintenance) doesn't mean a full bin
-            - binary_sensor.is_off: cover
-            - binary_sensor.is_off: bin
-            - switch.is_off: maintenance
-          then:
-            globals.set:
-              id: bin_full
-              value: 'true'
     cover:
       id: cover
       name: Cover
@@ -908,6 +1003,9 @@ binary_sensor:
               - globals.set:
                   id: level_needed
                   value: 'false'
+              - globals.set:
+                  id: drum_stall_retries
+                  value: '0'
               - if:
                   condition:  # while cleaning, level is only passed on the way down: don't "resume" (it would send the drum back up)
                     switch.is_off: clean
@@ -973,6 +1071,14 @@ binary_sensor:
     device_class: problem
     entity_category: diagnostic
     lambda: return id(bin_full) || id(waste_collected) >= id(tray_capacity).state;
+
+  - platform: template
+    id: motor_error_sensor
+    name: Motor Error
+    icon: mdi:engine-off-outline
+    device_class: problem
+    entity_category: diagnostic
+    lambda: return id(motor_error) != 0;
 
   - platform: template
     id: movement_blocked
@@ -1060,6 +1166,19 @@ button:
               - script.execute: level_if_needed
 
   - platform: template
+    name: Clear Motor Error
+    icon: mdi:engine-outline
+    entity_category: diagnostic
+    on_press:
+      - globals.set:
+          id: motor_error
+          value: '0'
+      - globals.set:
+          id: drum_stall_retries
+          value: '0'
+      - script.execute: level_if_needed
+
+  - platform: template
     name: Bin Emptied
     icon: mdi:delete-restore
     on_press:  # the bin sensor doesn't report removal on every unit
@@ -1130,6 +1249,7 @@ switch:
           - binary_sensor.is_off: drum_up
           - lambda: return !(${movement_blocked});
           - lambda: return id(clean).state || !id(tray_full).state;  # never start dumping into a full bin, even manually; a running clean may still resume
+          - lambda: return !id(motor_error);  # a failed drum move must be looked at first (Clear Motor Error)
         then:
           if:
             all:
@@ -1662,6 +1782,7 @@ script:
           - switch.is_off: maintenance
           - binary_sensor.is_off: pet_inside
           - binary_sensor.is_off: tray_full
+          - lambda: return !id(motor_error);
           - lambda: return id(cleans_left) > 0;
         then:
           - script.execute: clean_if_needed
@@ -1678,6 +1799,63 @@ script:
               switch.turn_on: clean  # resume
             else:
               script.execute: level_if_needed
+
+  - id: drum_stall  # stop code 4, as stock (FUN_4011d300, FUN_4011cbc4): pause 14 s, back off 400 steps, retry; 4th time: give up and level
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: return id(drum_stall_retries) < 3;
+          then:
+            - globals.set:
+                id: drum_stall_retries
+                value: !lambda return id(drum_stall_retries) + 1;
+            - delay: 14s
+            - if:
+                all:
+                  - lambda: return !(${movement_blocked});
+                  - binary_sensor.is_off: cover
+                  - binary_sensor.is_off: approach
+                  - binary_sensor.is_off: pet_inside
+                then:
+                  - if:
+                      condition:
+                        lambda: return id(mcu).last_direction(0) == 2;
+                      then:
+                        pkt4_mcu.motor:
+                          motor: drum
+                          direction: down
+                          speed: 100
+                          mode: sense
+                          duration: 400
+                          timeout: 800
+                      else:
+                        pkt4_mcu.motor:
+                          motor: drum
+                          direction: up
+                          speed: 100
+                          mode: sense
+                          duration: 400
+                          timeout: 800
+                  - delay: 5s  # 400 steps take about 4 s
+            - script.execute: auto_clean  # resumes the cleaning, or levels
+          else:
+            if:
+              condition:  # level only once: if that stalls too, the drum stays put until Clear Motor Error
+                lambda: return !id(motor_error);
+              then:
+                - globals.set:
+                    id: motor_error
+                    value: '4'
+                - if:
+                    condition:
+                      switch.is_on: clean
+                    then:
+                      switch.turn_off: clean
+                - globals.set:
+                    id: level_needed
+                    value: 'true'
+                - script.execute: level_if_needed
 
   - id: emergency_stop
     then:

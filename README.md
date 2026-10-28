@@ -51,7 +51,7 @@ It's able to work completely offline & without HA, although it's recommended to 
   * [ ] Stock minimum pet weight of 1.5 kg (`Pet Threshold`, 1 kg, is used instead)
 * [ ] Stock motion (see [docs/motion.md](docs/motion.md)):
   * [x] Moves sent the stock way: every drum and flap move carries a stock MCU destination (level / dump / smooth, open / closed) and the MCU stops it itself; cleaning, leveling and maintenance follow the stock recipes
-  * [ ] React to a move that ends without reaching its destination (stop on timeout or stall): retry with the remaining budget, then report an error, as stock does
+  * [x] React to a move that ends without reaching its destination: drum stall backs off and retries, timeouts raise `Motor Error`, the flap close is retried once, validated on hardware (see [docs/motion.md](docs/motion.md#abnormal-stops))
   * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
   * [ ] Detect a failed flap opening (only a failed close is detected)
   * [ ] Leveling: 0.5 s pauses, final 30-step move, and the swing via smooth even when already level
@@ -83,7 +83,7 @@ The drum is driven the way the stock firmware does it: each move carries a **des
 | Before | drum moved without destination, stopped by ESPHome on the `Drum Level` edge (overshoot) | up and down without destination, stopped by ESPHome on the `Drum Up` / `Drum Down` edges, no pause |
 | Now | `pos: level`, stopped by the MCU; from the dump side it goes past level to smooth first, then back to level, as stock; if already level, leveling just finishes | `pos: dump` → 3 s pause → `pos: smooth` → 1.5 s pause → `pos: level`, every stop by the MCU |
 
-Every ordinary move (cleaning, leveling, manual `Drum Up` / `Drum Down`, waste flap) carries a destination, so ESPHome no longer stops the motors on hall sensors; it only sends stops for safety (pet, cover, bin, `Block Movement`, OTA) or when a command is turned off ([details](docs/motion.md#who-stops-the-motors)). Maintenance follows the stock recipe: flap closed, then a relative move up ([details](docs/motion.md#maintenance-before--after)). `Block Movement` now blocks every move on its own ([details](docs/motion.md#fixed-block-movement)).
+Every ordinary move (cleaning, leveling, manual `Drum Up` / `Drum Down`, waste flap) carries a destination, so ESPHome no longer stops the motors on hall sensors; it only sends stops for safety (pet, cover, bin, `Block Movement`, OTA) or when a command is turned off ([details](docs/motion.md#who-stops-the-motors)). Maintenance follows the stock recipe: flap closed, then a relative move up ([details](docs/motion.md#maintenance-before--after)). `Block Movement` now blocks every move on its own ([details](docs/motion.md#fixed-block-movement)). Abnormal stops (drum stall, timeout, flap stall) are handled as stock and raise `Motor Error` when they can't be recovered ([details](docs/motion.md#abnormal-stops)).
 
 The MCU UART is also read more robustly (2048-byte RX buffer, every buffered frame parsed each loop, resync on the frame magic); `RX bytes dropped` is shown in the component config dump. Details and hardware validation: [docs/motion.md](docs/motion.md).
 

@@ -216,15 +216,21 @@ void PKT4MCUComponent::handle_packet_() {
 			if (data->result != 2 && !data->runtime) break;
 			if (auto *s = this->motor_position_sensor_[node->node]) s->publish_state(data->pos);
 			if (auto *s = this->motor_current_sensor_[node->node]) s->publish_state(data->cur);
-			if (data->result != 2)
-				if (auto *s = this->motor_stop_code_sensor_[node->node]) s->publish_state(data->scram);
+			if (data->result == 2) break;
+
+			// The MCU repeats the stopped status (with the position still changing if the motor is pushed back):
+			// the stop is reported once per command, so its reactions run once.
+			if (this->stop_reported_[node->node]) break;
+			this->stop_reported_[node->node] = true;
 
 			// Stock infers a full waste bin when the flap fails to close (MOTO_DOOR_CLOSE timeout -> WASTEBOX_FULL).
-			if (node->node == 1 && data->result != 2 && this->tray_closing_) {
+			// Published before the stop code, whose reactions may already send the next tray command.
+			if (node->node == 1 && this->tray_closing_) {
 				this->tray_closing_ = false;
 				if (data->pos != 9) ESP_LOGW(TAG, "Tray close failed: stopped at pos=%u scram=%u", data->pos, data->scram);
 				if (this->tray_close_failed_sensor_) this->tray_close_failed_sensor_->publish_state(data->pos != 9);
 			}
+			if (auto *s = this->motor_stop_code_sensor_[node->node]) s->publish_state(data->scram);
 		}; break;
 
 		case 0x9: {
@@ -338,7 +344,11 @@ void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uin
 		.timeout = timeout,
 		.tag = 0,
 	};
-	if (motor < 2) buf.tag = this->command_id_[motor] = this->command_id_[motor] % 255 + 1;
+	if (motor < 2) {
+		buf.tag = this->command_id_[motor] = this->command_id_[motor] % 255 + 1;
+		this->stop_reported_[motor] = false;
+		if (mode != 2) this->last_direction_[motor] = direction;
+	}
 	// Stop commands (mode 2) don't end the tracked close: the closed-position hall edge itself sends one.
 	if (motor == 1 && mode != 2) this->tray_closing_ = (direction == 2);
 	this->send_(0x2, (uint8_t*)&buf, sizeof(buf));

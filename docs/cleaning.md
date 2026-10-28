@@ -29,7 +29,7 @@ The stock firmware has no fill sensor: it infers a full bin when the waste flap 
 
 | Entity | Meaning |
 |---|---|
-| `Tray Close Failed` (diagnostic) | result of the last flap close: on when the tray motor stopped before the closed position (status position ≠ 9) |
+| `Tray Close Failed` (diagnostic) | result of the last flap close: on when the tray motor stopped before the closed position (status position ≠ 9); the first failure reopens and closes the flap again, the second one sets the full state |
 | `Tray Full` | on when the flap failed to close (latched, survives reboots) **or** `Waste Collected` ≥ `Tray Capacity` |
 | `Bin Emptied` (button) | to press after emptying the bin: resets `Waste Collected` and clears the latched full state |
 
@@ -40,4 +40,4 @@ Differences with the stock firmware:
 - A close interrupted by the cover, the bin removal or maintenance is not counted as a full bin.
 - `Bin Emptied` is needed because removing the bin is not reported on every unit (`Bin` never changes on a T4-MAIN-V2.3).
 
-Not validated on hardware with a really full bin. Don't block the flap by hand to test it.
+Validated on hardware with an object blocking the flap (retry, then `Tray Full`, see [motion.md](motion.md#abnormal-stops)); not yet with a really full bin. Don't block the flap by hand to test it.

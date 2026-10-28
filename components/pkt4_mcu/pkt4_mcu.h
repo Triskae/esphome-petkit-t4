@@ -12,6 +12,18 @@ namespace pkt4_mcu {
 
 static const uint16_t MAGIC = 0xA55A;
 
+// Meaning of a motor stop code (scram), from the stock handling (FUN_4011d300, FUN_4011e008).
+inline const char *stop_reason(int code) {
+	switch (code) {
+		case 0: return "Destination reached";
+		case 1: return "Stopped";
+		case 4: return "Drum stall";
+		case 5: return "Flap stall";
+		case 17: case 18: return "Timeout";
+		default: return "Unknown";
+	}
+}
+
 struct __attribute__((packed)) MCUPacket {
 	uint16_t magic;
 	uint8_t len,
@@ -48,6 +60,8 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void init(void);
 		void deinit(void);
 		void motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout, uint8_t pos = 0);
+		// Direction of the last move sent to a motor (1 = down/open, 2 = up/close), to back off the way it came.
+		uint8_t last_direction(uint8_t motor) const { return motor < 2 ? this->last_direction_[motor] : 0; }
 
 	protected:
 		uint8_t hw_ver_,
@@ -78,6 +92,8 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		                            *tray_close_failed_sensor_{nullptr};
 		bool tray_closing_{false};  // a tray close command is in progress
 		uint8_t command_id_[2]{};  // last ctrl_ID sent per motor, 1..255 as stock (FUN_4011d284)
+		uint8_t last_direction_[2]{};
+		bool stop_reported_[2]{};  // the stop of the last command was already reported
 
 		void send_(uint8_t pid, uint8_t payload[], uint8_t len);
 };

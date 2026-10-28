@@ -155,6 +155,33 @@ The guard in `level_if_needed` and `clean_if_needed` was a list of conditions, w
 | `Block Movement` on, then `Level` and `Tray` | no motor command sent |
 | `Block Movement` off | the pending leveling runs (flap open/close, drum already level) |
 
+## Abnormal stops
+
+Normal moves end with stop code 0 (destination reached) or 1 (stopped). The other codes are handled as the stock firmware does (`FUN_4011d300`, `FUN_4011cbc4`, `FUN_4011e008`; see the research report `RETOURS_MOTEURS_02_03.md`). Normal motion is unchanged.
+
+| Code | Meaning | Reaction |
+|---|---|---|
+| 4 | drum stall (seen once: high current at start) | pause 14 s, back off 400 steps (~4 s) the way it came, then resume (`auto_clean`: the cleaning resumes, or the drum levels); after 3 back-offs: `Motor Error`, cleaning stopped, one leveling attempt. The counter is reset when the drum reaches level |
+| 17, 18 | timeout (18 seen: overtime reached) | `Motor Error`, cleaning stopped, no further move |
+| 5 / flap close failure | flap stall | first failure: the flap is reopened and closed again (stock retries the flap); second failure: full bin (`Tray Full`) |
+
+`Motor Error` blocks cleanings, automatic or manual, until the `Clear Motor Error` button is pressed (leveling stays allowed). `Motor Error Reason`, `Drum Stop Reason` and `Tray Stop Reason` show the codes as text.
+
+The MCU repeats the stopped status of a command, sometimes with a new position (a flap released after a failed close moves on to 9, then 10). Only the first stopped status of each command is reported as its stop, so each reaction runs once; `Tray Close Failed` is published before the stop code, so it already shows the first failure.
+
+Hardware validation (28 October 2026, object placed in the bin so the flap can't close):
+
+| Time | Event |
+|---|---|
+| 12:35:40 | `Tray` on: flap opened (tag 1, pos 7), then closed by `level_if_needed` (tag 2) |
+| 12:35:48 | close stopped at pos 8, code 18 (8 s overtime) → flap reopened (tag 3) and closed again (tag 4) |
+| 12:35:57 | second failure, code 18 → `Tray Close Failed` and `Tray Full` on |
+| 12:36:57 | object removed: the flap closes (pos 9); `Tray Full` stays on until `Bin Emptied` |
+
+That run showed the repeated statuses: the later status of tag 4 at pos 10 was taken as another failed close and the flap was reopened and closed once more; fixed by reporting the stop once per command.
+
+Not ported: the stock pauses before resuming after a pet (6 s / 14 s; ESPHome resumes 5 s after `Approach` clears), and resuming the interrupted step where it stopped.
+
 ## Motor status feedback in Home Assistant
 
 Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and logged at DEBUG (`Motor <n>: result=… scram=… pos=… cur=…`). Optional sensors of the `pkt4_mcu` sensor platform:
@@ -165,4 +192,4 @@ Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and l
 | `drum_stop_code` / `tray_stop_code` | `Drum Stop Code`, `Tray Stop Code` | `scram` of the last stopped status: 0 = destination reached, 1 = stop command / end stop; other values are MCU-side protections (4 and 5 observed, meanings partly unknown) |
 | `drum_current` / `tray_current` | `Drum Current` (disabled by default) | raw current, unit unknown (~400–550 while the drum turns) |
 
-Stopped statuses with zero runtime (acknowledgements of a stop sent while already idle) are ignored, so they do not overwrite the last real stop. Statuses carrying another command's `ctrl_ID` are ignored too (see [mcu-protocol.md](mcu-protocol.md)); the moves themselves don't depend on statuses, only what is published and the failed flap close detection do.
+Stopped statuses with zero runtime (acknowledgements of a stop sent while already idle) are ignored, so they do not overwrite the last real stop; a command's stop code is published once, from its first stopped status. Statuses carrying another command's `ctrl_ID` are ignored too (see [mcu-protocol.md](mcu-protocol.md)); the moves themselves don't depend on statuses, only what is published and the failed flap close detection do.
