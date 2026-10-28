@@ -36,7 +36,14 @@ td.num { font-variant-numeric: tabular-nums; text-align: right; white-space: now
 .meta td { font-size: .85rem; color: var(--muted); word-break: break-all; }
 pre { background: var(--code); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: .85rem; margin: 0 0 8px; }
 button { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 14px; font: inherit; cursor: pointer; }
-.note { font-size: .85rem; }
+td.copy button { padding: 4px 10px; font-size: .85rem; }
+h2 { font-size: 1rem; margin: 0 0 8px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--muted); margin-bottom: 8px; }
+th.num { text-align: right; }
+.card { overflow-x: auto; }
+.note { font-size: .85rem; color: var(--muted); }
 </style>
 </head>
 <body>
@@ -275,21 +282,62 @@ const result = document.getElementById('result');
 const escape = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const fmt = n => n.toLocaleString('en-US');
 
+// secrets.yaml keys, one per calibration field.
+const FIELDS = [
+	['zero_raw', 'weight_stock_zero_raw', 'raw ADC value at 0 g (bare load cells)'],
+	['low_reference_raw', 'weight_stock_low_raw', 'raw value at the low reference'],
+	['high_reference_raw', 'weight_stock_high_raw', 'raw value at the high reference'],
+	['slope_low_raw_per_gram', 'weight_stock_slope_low', 'raw units per gram, first range'],
+	['slope_high_raw_per_gram', 'weight_stock_slope_high', 'raw units per gram, second range'],
+];
+
+function secretsYaml(c) {
+	return '# PetKit T4 factory weight calibration (tools/stock-calibration.html)\n'
+		+ FIELDS.map(([field, secret]) => `${secret}: ${c[field]}`).join('\n') + '\n';
+}
+
+// navigator.clipboard needs a secure context; fall back to a hidden textarea otherwise.
+async function copy(text) {
+	try {
+		await navigator.clipboard.writeText(text);
+	} catch {
+		const area = Object.assign(document.createElement('textarea'), { value: text });
+		area.style.position = 'fixed';
+		area.style.opacity = '0';
+		document.body.append(area);
+		area.select();
+		const ok = document.execCommand('copy');
+		area.remove();
+		if (!ok) throw new Error('copy refused');
+	}
+}
+
+function copyButton(label, text) {
+	const button = Object.assign(document.createElement('button'), { textContent: label, type: 'button' });
+	button.onclick = () => copy(text).then(
+		() => { button.textContent = 'Copied'; setTimeout(() => { button.textContent = label; }, 1500); },
+		() => { button.textContent = 'Copy failed'; });
+	return button;
+}
+
 function show(name, data) {
 	const c = data.calibration;
 	const lowGrams = Math.trunc((c.zero_raw - c.low_reference_raw) / c.slope_low_raw_per_gram);
 	const highGrams = Math.trunc((c.low_reference_raw - c.high_reference_raw) / c.slope_high_raw_per_gram);
-	const json = JSON.stringify(data, null, 2);
+	const yaml = secretsYaml(c), json = JSON.stringify(data, null, 2);
 	result.innerHTML = `
 		<div class="card">
 			<p class="ok">Calibration found, every CRC verified</p>
+			<h2>Paste into <code>secrets.yaml</code></h2>
+			<pre>${escape(yaml)}</pre>
+			<div class="actions" id="yaml-actions"></div>
+		</div>
+		<div class="card">
+			<h2>Values</h2>
 			<table>
-				<tr><th>Field</th><th>Meaning</th><th style="text-align:right">Value</th></tr>
-				<tr><td><code>zero_raw</code></td><td>raw ADC value at 0 g (bare load cells)</td><td class="num">${fmt(c.zero_raw)}</td></tr>
-				<tr><td><code>low_reference_raw</code></td><td>raw value at the low reference</td><td class="num">${fmt(c.low_reference_raw)}</td></tr>
-				<tr><td><code>high_reference_raw</code></td><td>raw value at the high reference</td><td class="num">${fmt(c.high_reference_raw)}</td></tr>
-				<tr><td><code>slope_low_raw_per_gram</code></td><td>raw units per gram, first range</td><td class="num">${c.slope_low_raw_per_gram}</td></tr>
-				<tr><td><code>slope_high_raw_per_gram</code></td><td>raw units per gram, second range</td><td class="num">${c.slope_high_raw_per_gram}</td></tr>
+				<tr><th>Field</th><th class="num">Value</th><th></th></tr>
+				${FIELDS.map(([field, , meaning]) => `<tr><td><code>${field}</code><br><span class="note">${meaning}</span></td>`
+					+ `<td class="num">${c[field]}</td><td class="copy" data-value="${c[field]}"></td></tr>`).join('')}
 			</table>
 			<p class="note" style="margin-top:12px">Stock two-range conversion: first range ${fmt(lowGrams)} g, second range ${fmt(highGrams)} g more. A lower raw value means more weight.</p>
 		</div>
@@ -300,15 +348,15 @@ function show(name, data) {
 				<tr><td>Partition</td><td>${data.partition} at ${data.partition_offset}</td></tr>
 				<tr><td>Records</td><td>${data.record_offsets.join(', ')}</td></tr>
 			</table>
-		</div>
-		<div class="card">
-			<pre id="json">${escape(json)}</pre>
-			<button id="copy">Copy JSON</button>
+			<details>
+				<summary>Full JSON</summary>
+				<pre>${escape(json)}</pre>
+				<div class="actions" id="json-actions"></div>
+			</details>
 		</div>`;
-	document.getElementById('copy').onclick = e => {
-		navigator.clipboard.writeText(json).then(() => { e.target.textContent = 'Copied'; },
-		                                         () => { e.target.textContent = 'Copy failed'; });
-	};
+	document.getElementById('yaml-actions').append(copyButton('Copy for secrets.yaml', yaml));
+	document.getElementById('json-actions').append(copyButton('Copy JSON', json));
+	result.querySelectorAll('td.copy').forEach(cell => cell.append(copyButton('Copy', cell.dataset.value)));
 }
 
 function fail(name, error) {

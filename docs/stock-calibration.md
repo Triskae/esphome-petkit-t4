@@ -22,7 +22,7 @@ A lower raw value means more weight. The stock conversion uses two ranges with i
 python3 tools/extract_stock_calibration.py petkit-stock-full.bin > calibration.json
 ```
 
-Without Python: open [`tools/stock-calibration.html`](../tools/stock-calibration.html) in a browser (a local copy works) and drop the dump on it. It runs the same checks and shows the five values; the file is read locally and never uploaded.
+Without Python: open [`tools/stock-calibration.html`](../tools/stock-calibration.html) in a browser (a local copy works) and drop the dump on it. It runs the same checks and shows the five values, each with a copy button, plus a block ready to paste into `secrets.yaml` (`weight_stock_zero_raw`, `weight_stock_low_raw`, `weight_stock_high_raw`, `weight_stock_slope_low`, `weight_stock_slope_high`; the firmware doesn't read these keys yet). The file is read locally and never uploaded.
 
 Options: `--partition`, `--namespace`, `--key`, and `--table-offset 0x8000` when the dump holds several partition tables. Anything that doesn't match the known T4 layout (encrypted partition, truncated dump, other schema, inconsistent values) is rejected with an `Extraction failed` message. An OTA application image is not enough: it has no partition table or NVS data.
 
