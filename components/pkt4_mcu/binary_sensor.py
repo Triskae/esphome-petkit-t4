@@ -23,6 +23,7 @@ CONF_DRUM_DOWN = 'drum_down'
 CONF_DRUM_LEVEL = 'drum_level'
 CONF_TRAY = 'tray'
 CONF_TRAY_CLOSE_FAILED = 'tray_close_failed'
+CONF_LINK_LOST = 'link_lost'
 
 CONFIG_SCHEMA = cv.Schema({
 	cv.GenerateID(): cv.use_id(PKT4MCUComponent),
@@ -49,6 +50,10 @@ CONFIG_SCHEMA = cv.Schema({
 	),
 	# Result of the last tray (waste flap) close: on when the motor stopped before the closed position.
 	cv.Optional(CONF_TRAY_CLOSE_FAILED): binary_sensor.binary_sensor_schema(
+		device_class=DEVICE_CLASS_PROBLEM,
+	),
+	# No frame from the MCU for more than 15 s (stock error `mcu`).
+	cv.Optional(CONF_LINK_LOST): binary_sensor.binary_sensor_schema(
 		device_class=DEVICE_CLASS_PROBLEM,
 	),
 })
@@ -90,3 +95,7 @@ async def to_code(config):
 	if tray_close_failed_config := config.get(CONF_TRAY_CLOSE_FAILED):
 		sens = await binary_sensor.new_binary_sensor(tray_close_failed_config)
 		cg.add(var.set_tray_close_failed_sensor(sens))
+
+	if link_lost_config := config.get(CONF_LINK_LOST):
+		sens = await binary_sensor.new_binary_sensor(link_lost_config)
+		cg.add(var.set_link_lost_sensor(sens))

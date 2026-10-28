@@ -9,6 +9,8 @@ namespace esphome {
 namespace pkt4_mcu {
 
 static const uint16_t MAGIC = 0xA55A;
+static const uint32_t LINK_TIMEOUT_MS = 15000;
+static const uint32_t REBOOT_SETTLE_MS = 2000;  // status bits ignored after an MCU reboot
 
 // Meaning of a motor stop code (scram), from the stock handling (FUN_4011d300, FUN_4011e008).
 inline const char *stop_reason(int code) {
@@ -49,6 +51,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		void set_drum_level_sensor(binary_sensor::BinarySensor *drum_level_sensor) { this->drum_level_sensor_ = drum_level_sensor; }
 		void set_tray_sensor(binary_sensor::BinarySensor *tray_sensor) { this->tray_sensor_ = tray_sensor; }
 		void set_tray_close_failed_sensor(binary_sensor::BinarySensor *sensor) { this->tray_close_failed_sensor_ = sensor; }
+		void set_link_lost_sensor(binary_sensor::BinarySensor *sensor) { this->link_lost_sensor_ = sensor; }
 		// Motor status (type 0x3) feedback, per motor: 0 = drum, 1 = tray.
 		void set_motor_position_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_position_sensor_[motor] = sensor; }
 		void set_motor_stop_code_sensor(uint8_t motor, sensor::Sensor *sensor) { this->motor_stop_code_sensor_[motor] = sensor; }
@@ -56,6 +59,8 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 
 		void init(void);
 		void deinit(void);
+		void reboot(void);
+		bool link_lost() const { return this->link_lost_; }
 		void motor(uint8_t motor, uint8_t mode, uint8_t direction, uint8_t speed, uint16_t duration, uint16_t timeout, uint8_t pos = 0);
 		// Direction of the last move sent to a motor (1 = down/open, 2 = up/close), to back off the way it came.
 		uint8_t last_direction(uint8_t motor) const { return motor < 2 ? this->last_direction_[motor] : 0; }
@@ -85,7 +90,12 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		                            *drum_down_sensor_{nullptr},
 		                            *drum_level_sensor_{nullptr},
 		                            *tray_sensor_{nullptr},
-		                            *tray_close_failed_sensor_{nullptr};
+		                            *tray_close_failed_sensor_{nullptr},
+		                            *link_lost_sensor_{nullptr};
+		uint32_t last_rx_ms_{0};  // last valid frame, any type
+		bool link_lost_{false};
+		bool rebooting_{false};  // status bits are ignored until REBOOT_SETTLE_MS after rebooted_ms_
+		uint32_t rebooted_ms_{0};
 		bool tray_closing_{false};  // a tray close command is in progress
 		uint8_t command_id_[2]{};  // last ctrl_ID sent per motor, 1..255 as stock (FUN_4011d284)
 		uint8_t last_direction_[2]{};
@@ -102,6 +112,11 @@ template<typename... Ts> class InitAction: public Action<Ts...>, public Parented
 template<typename... Ts> class DeinitAction: public Action<Ts...>, public Parented<PKT4MCUComponent> {
 	public:
 		void play(const Ts &...x) override { this->parent_->deinit(); }
+};
+
+template<typename... Ts> class RebootAction: public Action<Ts...>, public Parented<PKT4MCUComponent> {
+	public:
+		void play(const Ts &...x) override { this->parent_->reboot(); }
 };
 
 template<typename... Ts> class MotorAction: public Action<Ts...>, public Parented<PKT4MCUComponent> {

@@ -115,6 +115,7 @@ time:
     update_interval: never
 
   - platform: homeassistant
+    id: ha_time
     on_time_sync:
       bm8563.write_time:
 
@@ -302,6 +303,10 @@ globals:
 
   - id: bin_full  # the waste flap failed to close: cleared only by emptying the bin
     type: bool
+    restore_value: yes
+
+  - id: mcu_rebooted_at  # UTC of the last weekly MCU reboot (0: not known yet)
+    type: uint32_t
     restore_value: yes
 
   - id: level_needed
@@ -583,6 +588,16 @@ sensor:
     icon: mdi:clock-start
     disabled_by_default: yes
 
+  - platform: template
+    name: MCU Last Reboot
+    icon: mdi:restart
+    device_class: timestamp
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      if (!id(mcu_rebooted_at)) return {};
+      return id(mcu_rebooted_at);
+
 text_sensor:
   - platform: template
     name: Drum Stop Reason
@@ -676,6 +691,9 @@ binary_sensor:
     tray_close_failed:
       id: tray_close_failed
       name: Tray Close Failed
+      entity_category: diagnostic
+    link_lost:
+      name: MCU Link Lost
       entity_category: diagnostic
     cover:
       id: cover
@@ -954,6 +972,13 @@ button:
                   id: level_needed
                   value: 'true'
               - script.execute: level_if_needed
+
+  - platform: template
+    name: Reboot MCU
+    icon: mdi:chip
+    entity_category: diagnostic
+    on_press:
+      script.execute: mcu_reboot
 
   - platform: template
     name: Clear Motor Error
@@ -1654,6 +1679,30 @@ script:
                     value: 'true'
                 - script.execute: level_if_needed
 
+  - id: mcu_reboot  # only when idle: a reboot stops whatever the MCU is doing
+    then:
+      if:
+        all:
+          - lambda: return !id(mcu).link_lost();
+          - lambda: return id(ha_time).now().is_valid();
+          - switch.is_off: clean
+          - switch.is_off: maintenance
+          - switch.is_off: motor_drum_up
+          - switch.is_off: motor_drum_down
+          - binary_sensor.is_off: tray
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: approach
+          - lambda: return !id(level_needed) && !id(clean_if_needed).is_running() && !id(drum_stall).is_running();
+        then:
+          - pkt4_mcu.reboot:
+          - globals.set:
+              id: mcu_rebooted_at
+              value: !lambda return id(ha_time).now().timestamp;
+        else:
+          logger.log:
+            level: WARN
+            format: "MCU reboot postponed: not idle"
+
   - id: emergency_stop
     then:
       - pkt4_mcu.motor:
@@ -1674,3 +1723,17 @@ script:
 
 # by Sdore, 2024-26
 #   www.sdore.me
+
+interval:
+  - interval: 1h  # stock reboots the MCU when its last reboot is 7 days old (604800 s)
+    then:
+      - lambda: |-
+          auto now = id(ha_time).now();
+          if (!now.is_valid()) return;
+          if (!id(mcu_rebooted_at) || uint32_t(now.timestamp) < id(mcu_rebooted_at))
+            id(mcu_rebooted_at) = now.timestamp;  // first run, or the clock went back: count 7 days from now
+      - if:
+          condition:
+            lambda: return id(ha_time).now().is_valid() && uint32_t(id(ha_time).now().timestamp) - id(mcu_rebooted_at) >= 604800;
+          then:
+            script.execute: mcu_reboot

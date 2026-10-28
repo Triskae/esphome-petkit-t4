@@ -18,6 +18,7 @@ pkt4_mcu_ns = cg.esphome_ns.namespace('pkt4_mcu')
 PKT4MCUComponent = pkt4_mcu_ns.class_('PKT4MCUComponent', cg.Component, uart.UARTDevice)
 InitAction = pkt4_mcu_ns.class_('InitAction', automation.Action)
 DeinitAction = pkt4_mcu_ns.class_('DeinitAction', automation.Action)
+RebootAction = pkt4_mcu_ns.class_('RebootAction', automation.Action)
 MotorAction = pkt4_mcu_ns.class_('MotorAction', automation.Action)
 
 CONF_MOTOR = 'motor'
@@ -52,6 +53,16 @@ async def pkt4_mcu_init_to_code(config, action_id, template_arg, args):
 	cv.GenerateID(): cv.use_id(PKT4MCUComponent),
 }), synchronous=True)
 async def pkt4_mcu_deinit_to_code(config, action_id, template_arg, args):
+	var = cg.new_Pvariable(action_id, template_arg)
+	await cg.register_parented(var, config[CONF_ID])
+
+	return var
+
+
+@automation.register_action('pkt4_mcu.reboot', RebootAction, cv.Schema({
+	cv.GenerateID(): cv.use_id(PKT4MCUComponent),
+}), synchronous=True)
+async def pkt4_mcu_reboot_to_code(config, action_id, template_arg, args):
 	var = cg.new_Pvariable(action_id, template_arg)
 	await cg.register_parented(var, config[CONF_ID])
 

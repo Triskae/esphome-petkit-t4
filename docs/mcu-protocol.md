@@ -92,7 +92,14 @@ The **scram mask** is `0xF04C` for device types 12/13 and `0x704C` otherwise (bi
 - Before the handshake, the MCU sends its version (type 9) followed by a heartbeat `00` about once a second. After the ESP sends type 0 `{00}`, the stock capture shows a heartbeat `01`, then no more spontaneous version/heartbeat (**inferred**: `00` = waiting for the ESP, `01` = acknowledged). With this component the MCU keeps announcing `00` every second; the reason is not established.
 - The stock firmware does not read the heartbeat value in any business path. Every handled frame (types 0–5, 7–9) updates a last-reception time (`FUN_40127118`, `0x3ffcc3c0`).
 - **Error `mcu`** (index 1 of the 19-entry error table at `0x4010caac`: `DC, mcu, scale, falldown, moto_M, moto_D, hallT, hallB, hallH, hallD, hallS, hallO, hallC, PROX, rtc, atmz, full, scaleD, OLED`) is raised when nothing was received for **more than 15 s** (`0x4012635c`).
-- At task start, if the last MCU reboot is older than **7 days** (604800 s), the stock firmware checks the link with type 9 reads, then **reboots the MCU with type 0xA** and runs `mcu init` again.
+- At task start, if the last MCU reboot is older than **7 days** (604800 s), the stock firmware checks the link with type 9 reads, then **reboots the MCU with type 0xA** and runs `mcu init` again. The reboot frame is a write on node 0 with no data (`FUN_401273a8` → `FUN_4012e084(10, 0, 0, 0, 0, …)`): `5A A5 09 0A <seq> FF 00 <crc>`.
+
+What this component does:
+
+| Stock | This component |
+|---|---|
+| error `mcu` after 15 s without any frame | `MCU Link Lost` (problem) turns on after 15 s without any valid frame, of any type, and off at the next one; an error is logged. Diagnostic only, nothing is stopped |
+| weekly MCU reboot (type 0xA), then `mcu init` | checked every hour: once the last reboot (`MCU Last Reboot`, stored across ESP reboots, UTC from Home Assistant time) is 7 days old, the MCU is rebooted with the same frame. The MCU then announces its version again and the usual init sequence runs. The reboot waits until the litter box is idle (no cleaning, maintenance, manual move, leveling, open flap, pet in front or inside) and the link is up. The status bits are ignored for 2 s after the reboot: on the first test (28 October 2026, 13:07) the MCU re-initialized within 0.2 s, but its first status reported `Drum Down` while the drum was level, which started a leveling (flap opened and closed, drum still). The 7 days count from the first run after flashing; a clock going back restarts the count instead of rebooting. `Reboot MCU` does it at once, with the same idle checks |
 
 ## MCU version (type 9)
 

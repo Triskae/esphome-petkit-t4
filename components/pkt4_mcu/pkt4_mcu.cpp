@@ -9,6 +9,7 @@ static const char *const TAG = "pkt4_mcu";
 
 void PKT4MCUComponent::setup() {
 	ESP_LOGCONFIG(TAG, "Setting up T4 MCU...");
+	this->last_rx_ms_ = millis();
 	this->init();
 }
 
@@ -28,6 +29,15 @@ void PKT4MCUComponent::loop() {
 	// Drain every complete frame already buffered: handling one per loop() let the RX buffer overflow under load.
 	while (this->read_packet_())
 		this->handle_packet_();
+
+	// Stock raises its `mcu` error when no frame was received for more than 15 s (0x4012635c).
+	const bool lost = millis() - this->last_rx_ms_ > LINK_TIMEOUT_MS;
+	if (lost != this->link_lost_) {
+		this->link_lost_ = lost;
+		if (lost) ESP_LOGE(TAG, "No frame from the MCU for %" PRIu32 " s", LINK_TIMEOUT_MS / 1000);
+		else ESP_LOGI(TAG, "MCU link back");
+	}
+	if (this->link_lost_sensor_) this->link_lost_sensor_->publish_state(lost);
 }
 
 // Accumulates bytes into packet_ across loop() calls without blocking, resyncing byte by byte on the magic.
@@ -72,6 +82,7 @@ void PKT4MCUComponent::handle_packet_() {
 		uart::UARTDebug::log_hex(uart::UART_DIRECTION_RX, std::vector<uint8_t>((uint8_t*)&this->packet_, ((uint8_t*)&this->packet_ + this->packet_.len)), ' ');
 		return;
 	}
+	this->last_rx_ms_ = millis();
 
 	if (this->packet_.pid != 0x0 &&
 	    this->packet_.pid != 0x1 &&
@@ -120,6 +131,12 @@ void PKT4MCUComponent::handle_packet_() {
 						     bin_present :1;
 						uint16_t unk :7;
 					} *data = (struct p1_0*)node->data;  // repeated twice in payload
+
+					// Right after an MCU reboot the status bits are not settled yet (Drum Down seen on while the drum was level).
+					if (this->rebooting_) {
+						if (millis() - this->rebooted_ms_ < REBOOT_SETTLE_MS) break;
+						this->rebooting_ = false;
+					}
 
 					if (data->unk0) ESP_LOGW(TAG, "0x1.0 unk0 bit set!");
 					if (this->approach_sensor_) this->approach_sensor_->publish_state(data->approached);
@@ -308,6 +325,16 @@ void PKT4MCUComponent::handle_packet_() {
 
 void PKT4MCUComponent::init() {
 	this->send_(0x9, (uint8_t*)(uint8_t[]){0x80}, 1);
+}
+
+// Stock reboots the MCU once a week (type 0xA, node 0, no data; FUN_401273a8). The MCU then announces its
+// version again, which runs the whole init sequence.
+void PKT4MCUComponent::reboot() {
+	ESP_LOGW(TAG, "Rebooting the MCU");
+	this->send_(0xA, (uint8_t*)(uint8_t[]){0x00}, 1);
+	this->rebooting_ = true;
+	this->rebooted_ms_ = millis();
+	this->deinit();
 }
 
 void PKT4MCUComponent::deinit() {
