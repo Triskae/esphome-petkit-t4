@@ -95,3 +95,5 @@ svg.board .pin { fill: #3ddc84; font: 600 22px system-ui, sans-serif; text-ancho
 .verdict.err { background: color-mix(in srgb, var(--err) 15%, transparent); color: var(--err); }
 .verdict p { margin: 4px 0 0; font-weight: 400; color: inherit; }
 @media (max-width: 560px) { .dump-slots { grid-template-columns: 1fr; } }
+.callout.privacy { border-left-color: var(--ok); }
+.verdict .button { margin-top: 10px; font-weight: 600; }

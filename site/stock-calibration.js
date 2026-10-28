@@ -257,25 +257,38 @@ function copyButton(label, text) {
 	return button;
 }
 
-// Renders an extract() result into container.
-function renderCalibration(container, name, data) {
+// Renders an extract() result into container. In the install guide (guide: true) the secrets.yaml
+// lines are added to step 5 automatically: they only show at the bottom, for the command line.
+function renderCalibration(container, name, data, { guide = false } = {}) {
 	const c = data.calibration;
 	const lowGrams = Math.trunc((c.zero_raw - c.low_reference_raw) / c.slope_low_raw_per_gram);
 	const highGrams = Math.trunc((c.low_reference_raw - c.high_reference_raw) / c.slope_high_raw_per_gram);
 	const yaml = secretsYaml(c), json = JSON.stringify(data, null, 2);
-	container.innerHTML = `
+	const yamlCard = guide ? `
 		<div class="card">
-			<p class="ok">Calibration found, every CRC verified</p>
+			<h2>Using the command line?</h2>
+			<p class="note">Add these lines to your own <code>secrets.yaml</code>. With the form of step 5, there is nothing to copy.</p>
+			<pre>${escape(yaml)}</pre>
+			<div class="actions yaml-actions"></div>
+		</div>` : `
+		<div class="card">
 			<h2>Paste into <code>secrets.yaml</code></h2>
 			<pre>${escape(yaml)}</pre>
 			<div class="actions yaml-actions"></div>
+		</div>`;
+	const copyColumn = guide ? '' : '<th></th>';
+	container.innerHTML = `
+		<div class="card">
+			<p class="ok">Calibration found, every CRC verified</p>
+			${guide ? '<p class="note">Already added to the <code>secrets.yaml</code> of <a href="#secrets">step 5</a>.</p>' : ''}
 		</div>
+		${guide ? '' : yamlCard}
 		<div class="card">
 			<h2>Values</h2>
 			<table>
-				<tr><th>Field</th><th class="num">Value</th><th></th></tr>
+				<tr><th>Field</th><th class="num">Value</th>${copyColumn}</tr>
 				${FIELDS.map(([field, , meaning]) => `<tr><td><code>${field}</code><br><span class="note">${meaning}</span></td>`
-					+ `<td class="num">${c[field]}</td><td class="copy" data-value="${c[field]}"></td></tr>`).join('')}
+					+ `<td class="num">${c[field]}</td>` + (guide ? '' : `<td class="copy" data-value="${c[field]}"></td>`) + '</tr>').join('')}
 			</table>
 			<p class="note" style="margin-top:12px">Stock two-range conversion: first range ${fmt(lowGrams)} g, second range ${fmt(highGrams)} g more. A lower raw value means more weight.</p>
 		</div>
@@ -291,7 +304,8 @@ function renderCalibration(container, name, data) {
 				<pre>${escape(json)}</pre>
 				<div class="actions json-actions"></div>
 			</details>
-		</div>`;
+		</div>
+		${guide ? yamlCard : ''}`;
 	container.querySelector('.yaml-actions').append(copyButton('Copy for secrets.yaml', yaml));
 	container.querySelector('.json-actions').append(copyButton('Copy JSON', json));
 	container.querySelectorAll('td.copy').forEach(cell => cell.append(copyButton('Copy', cell.dataset.value)));
