@@ -172,7 +172,10 @@ cmp petkit-stock-a.bin petkit-stock-b.bin</pre>
 
 	<section class="step" id="secrets">
 		<h2>5. Prepare <code>secrets.yaml</code></h2>
-		<p>The firmware reads its passwords and keys from <code>secrets.yaml</code>, next to <code>petkit.yaml</code>. Fill this form to generate it; the calibration lines from step 4 are added when available. Nothing leaves the page.</p>
+		<p>The firmware reads its passwords and keys from <code>secrets.yaml</code>, next to <code>petkit.yaml</code>. Fill this form to generate it; the calibration lines from step 4 are added when available.</p>
+		<div class="callout privacy">
+			<p><strong>Nothing leaves your browser.</strong> This page has no server: what you type here, your dumps and your firmware are never uploaded or saved anywhere. The file is only created on your computer when you download it, and everything is gone when you close the tab.</p>
+		</div>
 		<div class="tool">
 			<label class="field"><span>Wi-Fi network name (2.4 GHz)</span><input type="text" id="wifi-ssid" autocomplete="off"></label>
 			<label class="field"><span>Wi-Fi password</span><input type="password" id="wifi-password" autocomplete="off"></label>
@@ -384,7 +387,7 @@ function showCalibration(name, buffer) {
 	try {
 		const data = extract(buffer);
 		calibration = data.calibration;
-		renderCalibration($('calibration'), name, data);
+		renderCalibration($('calibration'), name, data, { guide: true });
 	} catch (error) {
 		calibration = null;
 		renderCalibrationError($('calibration'), name, error);
@@ -406,11 +409,11 @@ function firstDifference(a, b) {
 
 const VERDICT_ICONS = { ok: '✓ ', err: '✗ ', wait: '' };
 
-function showVerdict(kind, title, detail) {
+function showVerdict(kind, title, detail, next = '') {
 	const verdict = $('dump-verdict');
 	verdict.hidden = false;
 	verdict.className = 'verdict ' + kind;
-	verdict.innerHTML = `${VERDICT_ICONS[kind]}${escape(title)}<p>${escape(detail)}</p>`;
+	verdict.innerHTML = `${VERDICT_ICONS[kind]}${escape(title)}<p>${escape(detail)}</p>${next}`;
 }
 
 function compareDumps() {
@@ -432,7 +435,8 @@ function compareDumps() {
 			            `First difference at ${hex(offset)}. Check the contacts, keep the device in download mode, and read again until two reads match.`);
 		else {
 			showVerdict('ok', 'The two dumps are identical: you can go to the next step.',
-			            a.sha ? `SHA-256 ${a.sha}` : 'Byte for byte identical.');
+			            a.sha ? `SHA-256 ${a.sha}` : 'Byte for byte identical.',
+			            '<a class="button" href="#secrets">Continue to step 5 →</a>');
 			$('backup-confirmed').checked = true;
 		}
 	}
