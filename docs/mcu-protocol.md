@@ -83,6 +83,8 @@ The **scram mask** is `0xF04C` for device types 12/13 and `0x704C` otherwise (bi
 
 14 data bytes: `result, scram, act, speed, pos, step(u16), cur(u16), cur_max(u16), runtime(u16), ctrl_ID`. `result` 2 = running, 3 = stopped. This component parses it and publishes position, stop code and current per motor (see [motion.md](motion.md#motor-status-feedback-in-home-assistant)).
 
+`ctrl_ID` echoes the last byte of the motor command. As stock (`FUN_4011d284`, `FUN_4011d42c`), the component numbers each command per motor from 1 to 255 and ignores a status carrying another command's ID, so a late status of a previous move is not taken for the current one. A status with ID 0 is still accepted. Confirmed on hardware (28 October 2026): the MCU echoes the ID in every status of that move (flap open with ID 1, close with ID 2).
+
 **Weight cadence (confirmed):** the MCU delivers ~11.35 samples/s either way. Without the type 7 config it sends 10 samples per packet at ~1.13 packets/s; with `{5,10,10}` it sends 5 per packet at ~2.27 packets/s. The config lives in MCU RAM: an ESP OTA does not reset it, a power cycle does.
 
 ## Heartbeat and link supervision

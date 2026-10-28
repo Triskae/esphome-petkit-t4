@@ -165,4 +165,4 @@ Motor statuses (`0x03`, see [mcu-protocol.md](mcu-protocol.md)) are parsed and l
 | `drum_stop_code` / `tray_stop_code` | `Drum Stop Code`, `Tray Stop Code` | `scram` of the last stopped status: 0 = destination reached, 1 = stop command / end stop; other values are MCU-side protections (4 and 5 observed, meanings partly unknown) |
 | `drum_current` / `tray_current` | `Drum Current` (disabled by default) | raw current, unit unknown (~400–550 while the drum turns) |
 
-Stopped statuses with zero runtime (acknowledgements of a stop sent while already idle) are ignored, so they do not overwrite the last real stop.
+Stopped statuses with zero runtime (acknowledgements of a stop sent while already idle) are ignored, so they do not overwrite the last real stop. Statuses carrying another command's `ctrl_ID` are ignored too (see [mcu-protocol.md](mcu-protocol.md)); the moves themselves don't depend on statuses, only what is published and the failed flap close detection do.

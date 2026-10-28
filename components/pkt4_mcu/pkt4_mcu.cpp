@@ -206,6 +206,12 @@ void PKT4MCUComponent::handle_packet_() {
 			ESP_LOGD(TAG, "Motor %u: result=%u scram=%u pos=%u act=%u cur=%u/%u runtime=%u tag=%u", node->node,
 			         data->result, data->scram, data->pos, data->act, data->cur, data->cur_max, data->runtime, data->tag);
 
+			// Stock (FUN_4011d42c) ignores statuses carrying another command's ID; 0 (no ID echoed) is still accepted.
+			if (data->tag && data->tag != this->command_id_[node->node]) {
+				ESP_LOGD(TAG, "Motor %u: status of command %u ignored (last sent %u)", node->node, data->tag, this->command_id_[node->node]);
+				break;
+			}
+
 			// A stopped status with no runtime only acknowledges a stop sent while already idle.
 			if (data->result != 2 && !data->runtime) break;
 			if (auto *s = this->motor_position_sensor_[node->node]) s->publish_state(data->pos);
@@ -332,6 +338,7 @@ void PKT4MCUComponent::motor(uint8_t motor, uint8_t mode, uint8_t direction, uin
 		.timeout = timeout,
 		.tag = 0,
 	};
+	if (motor < 2) buf.tag = this->command_id_[motor] = this->command_id_[motor] % 255 + 1;
 	// Stop commands (mode 2) don't end the tracked close: the closed-position hall edge itself sends one.
 	if (motor == 1 && mode != 2) this->tray_closing_ = (direction == 2);
 	this->send_(0x2, (uint8_t*)&buf, sizeof(buf));

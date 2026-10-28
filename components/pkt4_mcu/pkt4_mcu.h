@@ -77,6 +77,7 @@ class PKT4MCUComponent: public Component, public uart::UARTDevice {
 		                            *tray_sensor_{nullptr},
 		                            *tray_close_failed_sensor_{nullptr};
 		bool tray_closing_{false};  // a tray close command is in progress
+		uint8_t command_id_[2]{};  // last ctrl_ID sent per motor, 1..255 as stock (FUN_4011d284)
 
 		void send_(uint8_t pid, uint8_t payload[], uint8_t len);
 };
