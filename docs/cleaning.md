@@ -31,7 +31,7 @@ The stock firmware has no fill sensor: it infers a full bin when the waste flap 
 |---|---|
 | `Tray Close Failed` (diagnostic) | result of the last flap close: on when the tray motor stopped before the closed position (status position ≠ 9); the first failure reopens and closes the flap again, the second one sets the full state |
 | `Tray Full` | on when the flap failed to close (latched, survives reboots) **or** `Waste Collected` ≥ `Tray Capacity` |
-| `Bin Emptied` (button) | to press after emptying the bin: resets `Waste Collected` and clears the latched full state |
+| `Bin Emptied` (button) | to press once the bin is back in place, emptied or just shaken down: recomputes `Waste Collected` from the measured weight (weight − `Litter Mass`, so it stays about the same if the waste is still in the bin) and clears the latched full state. The bin must be in place, the cover closed and nothing on the litter, or the litter mass is thrown off. `Tray Full` stays on while `Waste Collected` ≥ `Tray Capacity` |
 
 While `Tray Full` is on, no cleaning starts, automatic or manual. A cleaning already running can still resume after a pet interruption, so the drum is never left at dump. Leveling stays allowed.
 
