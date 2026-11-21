@@ -131,7 +131,7 @@ python -m esptool --chip esp32 --port /dev/cu.usbserial-XXXX --baud 115200 flash
 
 	<section class="step" id="backup">
 		<h2>4. Back up the stock firmware, twice</h2>
-		<p>Read the <strong>whole 8 MB flash</strong> before anything else. This backup is the only way back to the stock firmware, and it holds the factory weight calibration of your unit. A 4 MB dump isn't enough: the calibration and the second firmware slot are past 4 MB.</p>
+		<p>Read the <strong>whole 8 MB flash</strong> before anything else. This backup is the only way back to the stock firmware, and it holds the factory weight calibration of your unit. A 4 MB dump isn't enough to restore: the second firmware slot and the stock images and translations go past 4 MB.</p>
 		<p><strong>Read it twice and compare the two dumps.</strong> Identical dumps prove the reads are good; a difference means a bad contact or a corrupted read. Each read takes about <strong>13 minutes at 115200 baud</strong>. Don't let the stock firmware start between the two reads: it could change its saved data.</p>
 		<div class="tool">
 			<h3>Read the flash</h3>
@@ -181,6 +181,7 @@ cmp petkit-stock-a.bin petkit-stock-b.bin</pre>
 			<label class="field"><span>Wi-Fi password</span><input type="password" id="wifi-password" autocomplete="off"></label>
 			<label class="field"><span>Fallback access point name (shown when the Wi-Fi is unreachable)</span><input type="text" id="ap-ssid" value="Petkit T4"></label>
 			<label class="field"><span>Fallback access point password (8 characters or more)</span><input type="text" id="ap-password" autocomplete="off"></label>
+			<p class="status err" id="ap-password-short" hidden>Too short: Wi-Fi needs 8 characters or more, ESPHome would refuse to compile.</p>
 			<label class="field"><span>OTA password (wireless updates)</span><input type="text" id="ota-password" autocomplete="off"></label>
 			<label class="field"><span>Home Assistant API encryption key</span><input type="text" id="api-key" autocomplete="off"></label>
 			<div class="row">
@@ -270,7 +271,8 @@ python -m esptool --chip esp32 --port /dev/cu.usbserial-XXXX --baud 115200 --bef
 			<tr><td>Download mode never starts</td><td>The board must be powered by its own power adapter, not by the serial adapter.</td></tr>
 			<tr><td>Old advice says to hold a button on GPIO2</td><td>That's wrong for the T4: GPIO2 powers the display. Download mode is the OK button, on GPIO0.</td></tr>
 			<tr><td>A transfer stops halfway</td><td>Lower the speed (step 3), use shorter wires, and make sure the probes don't move.</td></tr>
-			<tr><td>The dump is rejected by the extractor</td><td>Partial dump (4 MB instead of 8 MB) or corrupted read: read it again.</td></tr>
+			<tr><td>The dump check reports an incomplete dump</td><td>Partial read (4 MB instead of 8 MB): read the whole flash again. A 4 MB dump still holds the calibration, but can't restore the stock firmware.</td></tr>
+			<tr><td>The dump is rejected by the extractor</td><td>Corrupted read: read it again, and compare two reads.</td></tr>
 			<tr><td>No Wi-Fi after flashing</td><td>Join the fallback access point and check the Wi-Fi credentials of <code>secrets.yaml</code>.</td></tr>
 			<tr><td><code>MCU Link Lost</code> on, or <code>MCU Handshake</code> off</td><td>The ESP32 doesn't hear the motor MCU: check the board connectors that were unplugged while opening, then use <em>Reboot MCU</em>.</td></tr>
 		</table>
@@ -518,6 +520,8 @@ api_encryption_key: ${yamlString(value('api-key'))}
 }
 
 function updateSecrets() {
+	const apPassword = $('ap-password').value;
+	$('ap-password-short').hidden = !apPassword || apPassword.length >= 8;  // empty: open access point
 	const text = secretsText();
 	$('secrets-yaml').textContent = text;
 	const actions = $('secrets-actions');

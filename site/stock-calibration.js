@@ -30,7 +30,7 @@ function crc32(...parts) {
 	return ~crc >>> 0;
 }
 
-// Compact MD5 (RFC 1321), only for the partition table checksum.
+// Compact MD5 (RFC 1321): partition table checksum, and the install guide's read and write checks.
 function md5(data) {
 	const s = [7, 12, 17, 22, 5, 9, 14, 20, 4, 11, 16, 23, 6, 10, 15, 21];
 	const K = Array.from({ length: 64 }, (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0);
