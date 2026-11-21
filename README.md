@@ -12,12 +12,13 @@ Behaves like the stock firmware:
 - Leveling and maintenance moves following the stock recipes, every drum and flap stop done by the MCU ([details](#motion))
 - Full waste bin detected from a failed flap close ([details](#full-waste-bin-and-motor-errors))
 - Abnormal motor stops handled as stock: drum stall back-off and retries, flap close retry ([details](#full-waste-bin-and-motor-errors))
+- Local menu like stock: Menu steps through Clean, Level, Maintenance, Bin Emptied and Wi-Fi, OK starts the item ([details](docs/menu.md))
 
 Extra features:
 - Native Home Assistant integration: settings, manual motor controls and many internal sensors (motor positions, stop codes, weight, presence)
-- Top (menu) button: Maintenance mode (double click) / Reboot (hold)
-- Bottom (ok) button: Maintenance done / Level the litter
-- Advanced status displaying, QR code with a Wi-Fi AP connection shortcut
+- Top (menu) button held: Reboot
+- Bottom (ok) button, menu closed: Maintenance done / Level the litter
+- Advanced status displaying, QR code with a Wi-Fi AP connection shortcut (also from the menu)
 - Quieter functioning
 - Collected waste amount tracking
 - Beep after reaching set amount of litter in maintenance mode

@@ -129,17 +129,27 @@ substitutions:
   # Any move is forbidden during an OTA or with Block Movement on. Read the states directly: the
   # Movement Blocked sensor may not be refreshed yet when Block Movement's own triggers run.
   movement_blocked: 'id(ota_state) || id(block_movement).state'
+  # Local menu (menu_page global): 0 closed, 1..menu_items the items in stock order, then the Wi-Fi QR code
+  menu_items: '5'
+  menu_wifi_qr: '6'
 
 qr_code:
   id: qrcode_ap
   value: "WIFI:S:${ap_ssid};T:WPA;P:${ap_password};;"
 
 font:
-  id: font_weight
-  file:
-    type: gfonts
-    family: Ubuntu Mono
-  size: 48
+  - id: font_weight
+    file:
+      type: gfonts
+      family: Ubuntu Mono
+    size: 48
+
+  - id: font_label  # menu item names; 11 characters fit the 128 px width
+    file:
+      type: gfonts
+      family: Ubuntu Mono
+    size: 20
+    glyphs: " -ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 
 image:
   - id: icon_logo
@@ -197,6 +207,32 @@ image:
     type: binary
     resize: 64x64
 
+  # Menu items, drawn above their name like the stock menu pages
+  - id: icon_menu_clean
+    file: mdi:recycle
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_level
+    file: mdi:spirit-level
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_maintenance
+    file: mdi:progress-wrench
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_bin
+    file: mdi:delete-restore
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_wifi
+    file: mdi:wifi
+    type: binary
+    resize: 64x64
+
 display:
   platform: ssd1306_spi
   id: oled
@@ -215,7 +251,21 @@ display:
     static uint16_t clip = 0;
 
     if (id(ota_state)) it.image(it.get_width()/2, it.get_height()/2, id(icon_ota), ImageAlign::CENTER);
-    else if (id(clean).state || (id(maintenance).state && millis() % 5000 < 1500) || (id(level_needed) && (!id(maintenance).state))) {
+    else if (id(menu_page) == ${menu_wifi_qr}) {
+      uint8_t scale = min(it.get_width(), it.get_height()) / id(qrcode_ap).get_size();
+      it.qr_code((it.get_width() - id(qrcode_ap).get_size()*scale)/2, (it.get_height() - id(qrcode_ap).get_size()*scale)/2, id(qrcode_ap), COLOR_ON, scale);
+    } else if (id(menu_page)) {
+      static const char *const labels[] = {"Clean", "Level", "Maintenance", "Bin Emptied", "Wi-Fi"};
+      BaseImage *const icons[] = {id(icon_menu_clean), id(icon_menu_level), id(icon_menu_maintenance), id(icon_menu_bin), id(icon_menu_wifi)};
+      const int item = id(menu_page) - 1, count = ${menu_items};
+      for (int i = 0; i < count; i++) {  // position in the menu
+        int x = it.get_width()/2 + (2*i - (count - 1)) * 6;
+        if (i == item) it.filled_circle(x, 5, 3);
+        else it.circle(x, 5, 2);
+      }
+      it.image(it.get_width()/2, 14, icons[item], ImageAlign::TOP_CENTER);
+      it.print(it.get_width()/2, it.get_height(), id(font_label), TextAlign::BOTTOM_CENTER, labels[item]);
+    } else if (id(clean).state || (id(maintenance).state && millis() % 5000 < 1500) || (id(level_needed) && (!id(maintenance).state))) {
       BaseImage *icon = id(approach).state?id(icon_problem):
                         id(clean).state?id(icon_clean):
                         id(maintenance).state?id(icon_maintenance):
@@ -255,6 +305,14 @@ display:
     clip = 0;
 
 globals:
+  - id: menu_page  # see the menu_items substitution
+    type: int
+    initial_value: '0'
+
+  - id: menu_at  # millis() of the last menu button press, for the timeout
+    type: uint32_t
+    initial_value: '0'
+
   - id: weight_zero
     type: int
     initial_value: '7975680'
@@ -920,12 +978,11 @@ binary_sensor:
     pin:
       number: GPIO34
       inverted: yes
-    on_double_click:
-      if:
-        condition:
-          switch.is_off: maintenance
-        then:
-          switch.turn_on: maintenance
+    on_click:  # stock: opens the menu, then steps through it; after the last item it closes
+      lambda: |-
+        if (id(ota_state) || id(clean).state) return;
+        id(menu_page) = id(menu_page) >= ${menu_items} ? 0 : id(menu_page) + 1;
+        id(menu_at) = millis();
     on_multi_click:
       timing:
         - ON for at least 2s
@@ -940,7 +997,22 @@ binary_sensor:
       inverted: yes
       ignore_strapping_warning: yes
     on_click:
-      button.press: level
+      if:
+        condition:
+          lambda: return id(menu_page) != 0;
+        then:  # stock: OK starts the selected item; the actions keep their own safety checks
+          lambda: |-
+            const int page = id(menu_page);
+            id(menu_page) = page == ${menu_items} ? ${menu_wifi_qr} : 0;
+            id(menu_at) = millis();
+            switch (page) {
+              case 1: id(clean).turn_on(); break;
+              case 2: id(level).press(); break;
+              case 3: id(maintenance).toggle(); break;
+              case 4: id(bin_emptied_button).press(); break;
+            }
+        else:
+          button.press: level
 
   - platform: gpio
     name: MCU
@@ -997,6 +1069,7 @@ button:
       - script.execute: level_if_needed
 
   - platform: template
+    id: bin_emptied_button
     name: Bin Emptied
     icon: mdi:delete-restore
     on_press:  # the bin sensor doesn't report removal on every unit
@@ -1728,6 +1801,14 @@ script:
 #   www.sdore.me
 
 interval:
+  - interval: 1s  # stock closes a menu page after 10 s without a press, the Wi-Fi page after 60 s
+    then:
+      lambda: |-
+        if (!id(menu_page)) return;
+        if (id(clean).state || id(ota_state) ||
+            millis() - id(menu_at) >= (id(menu_page) == ${menu_wifi_qr} ? 60000u : 10000u))
+          id(menu_page) = 0;
+
   - interval: 1h  # stock reboots the MCU when its last reboot is 7 days old (604800 s)
     then:
       - lambda: |-
