@@ -126,6 +126,8 @@ Motion ([docs/motion.md](docs/motion.md)):
 Local controls ([docs/menu.md](docs/menu.md)):
 * [x] Local menu like stock: Menu steps through the items, OK starts the selected one, closes after 10 s without a press
 * [x] Menu items call the same switches and buttons as Home Assistant, so every safety check applies
+* [x] A refused Clean or Empty Litter shows why on the display (pet, cover, bin, full bin, motor error…); the waste summary only follows a real cleaning
+* [x] The Maintenance item reads "End Maint." while maintenance is on, since OK ends it
 * [x] `Bin Emptied` in the menu instead of the stock drum reset (which `Level` already covers)
 * [x] Wi-Fi item shows the fallback AP QR code (stock starts the PetKit app pairing)
 * [ ] `Empty Litter` in the menu, with a second OK to confirm (to validate on hardware)
