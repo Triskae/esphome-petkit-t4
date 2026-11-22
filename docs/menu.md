@@ -15,11 +15,11 @@ The two buttons drive a menu shaped like the stock one. Each page shows an icon 
 | Clean | turns `Clean` on | 22, process 0 |
 | Level | presses `Level` | 24, process 4 (smooth) |
 | Empty Litter | asks to confirm ("OK to empty", 10 s); a second OK turns `Empty Litter` on | 23, process 1, not in the stock menu ([details](motion.md#empty-litter)) |
-| Maintenance | toggles `Maintenance` | 26, process 9 |
+| Maintenance | toggles `Maintenance`; while it is on, the item reads "End Maint." | 26, process 9 |
 | Bin Emptied | presses `Bin Emptied` | none: replaces stock page 18 (process 3, drum reset) |
 | Wi-Fi | shows the fallback AP QR code for 60 s; any button closes it | 17, starts the PetKit app pairing (page 27) |
 
-The menu closes after 10 s without a press, like the stock pages (timeout `0x2710` ms in the page table). It does not open while a cleaning, the litter emptying or an OTA runs, and closes if one starts. The actions keep their own safety checks: an item refused by a check (pet, cover, bin, full bin, motor error) simply does nothing.
+The menu closes after 10 s without a press, like the stock pages (timeout `0x2710` ms in the page table). It does not open while a cleaning, the litter emptying or an OTA runs, and closes if one starts. The actions keep their own safety checks. When `Clean` or `Empty Litter` refuses to start, from the menu, Home Assistant or an automatic clean, the display shows an alert icon and the first failing check for 5 s: Pet inside, Cover open, Bin removed, Bin full, Motor error, Blocked, Maintenance, Busy or Not level. The waste summary (drop icon and grams) only follows a cleaning that really ran; it used to show after a refused start too.
 
 Differences with stock:
 - The stock drum reset (process 3) brings the drum back to its start position; `Level` already does that here, so the item is replaced by `Bin Emptied`, which otherwise needs Home Assistant.
