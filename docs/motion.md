@@ -154,7 +154,7 @@ Bookkeeping, once back at level: the weight that left the drum is added to `Wast
 
 Stock also checks the flap and bin at the end (`dump_done HALL_OPEN err!`, `dump_done WASTEBOX_FULL!`); here the usual flap close check of the leveling tail covers the full bin.
 
-Not validated on hardware yet.
+Validated on hardware on 22 November 2026.
 
 ## Who stops the motors
 

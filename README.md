@@ -114,7 +114,7 @@ Motion ([docs/motion.md](docs/motion.md)):
 * [x] Abnormal stops handled as stock: drum stall back-off, timeouts raise `Motor Error`, flap close retried once (validated on hardware)
 * [x] `Block Movement` blocks every move on its own
 * [x] A cleaning interrupted by a pet at dump carries on, and an aborted OTA no longer blocks moves until a reboot
-* [ ] Empty Litter (stock process 1, "dump litter"): flap open, 7 drum moves between dump and smooth, leveling tail; pauses for a pet, cover or bin; from HA and the menu (to validate on hardware)
+* [x] Empty Litter (stock process 1, "dump litter"): flap open, 7 drum moves between dump and smooth, leveling tail; pauses for a pet, cover or bin; from HA and the menu (validated on hardware)
 * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
 * [ ] Detect a failed flap opening (only a failed close is detected)
 * [ ] Leveling: 0.5 s pauses, final 30-step move, and the swing via smooth even when already level
