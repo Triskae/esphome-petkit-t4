@@ -127,6 +127,35 @@ With the flap closed, maintenance never drops anything into the waste bin, so it
 
 Not ported: the 900 s wait step (its release conditions are unknown, so maintenance still lasts until it is turned off) and the stock exit path.
 
+## Empty Litter
+
+Stock process 1 tips all the litter into the waste bin, to replace it. Stock starts it from the app ("dump litter"); its display page (23) is not reachable from the stock menu. Here it is the `Empty Litter` switch, also in the [local menu](menu.md) with a confirmation.
+
+Stock recipe 1 (`FUN_4011d998`, branch `0x4011dda8`), step builder `FUN_4011cb28(motor, queue, step id, class, type, pos, action, step)`:
+
+| # | Stock step | Here |
+|---|---|---|
+| 1 | flap homing (`FUN_4011ccd8`), check step (`FUN_4011c638`), flap open: type 3, `pos=4` | flap open (`pos: open`), cancelled if it isn't open within 10 s |
+| 2 | drum alignment when between positions (`FUN_4011cc10`) | not needed: every move carries a destination |
+| 3 | 7 drum moves, type 3, step id `0xfa` (the last `0x100`): `pos=2` act 2 (up to dump), `pos=3` act 1 (down to smooth), alternately, starting and ending at dump; a 500 ms pause (`FUN_4011c5dc(1,1,500)`) after each | the same 7 moves (`pos: dump` up, `pos: smooth` down) with 500 ms pauses, each stopped by the MCU |
+| 4 | after step `0x100`: 500 ms pause, then the leveling tail `FUN_4011cd9c(0xf6)` (`app proc add reset 2 tail`): via smooth back to level, flap closed (`pos=5`) | `Empty Litter` turns itself off and its `turn_off_action` levels [via smooth](#leveling-via-smooth); reaching level closes the flap |
+
+Each completed `0xfa` / `0x100` step advances the stock percentage (`FUN_4011ba90`: 13, 25, 38, 50, 63, 75, 88, 99). It counts steps, not litter: `Empty Litter Progress` does the same, in sevenths.
+
+Interruptions:
+- A pet (`Approach`, `Pet Inside`), the cover or the bin pauses the recipe: the current move is stopped (by the MCU or the usual safety stops) and resent once they clear, so no move is skipped.
+- A drum stall goes through the usual back-off (`drum_stall`) and the move is resent; a timeout or a stall that keeps failing sets `Motor Error` and stops `Empty Litter` where it is, without leveling, as for a cleaning.
+- A move that neither reaches its position within 120 s nor was interrupted cancels the recipe, then levels.
+- Turning `Empty Litter` off stops the drum and levels.
+
+It doesn't start while cleaning, in maintenance, with `Tray Full` on, with a `Motor Error`, or with a pet, the cover or the bin. `level_if_needed`, the level release and the automatic cleaning keep out of its way while it runs.
+
+Bookkeeping, once back at level: the weight that left the drum is added to `Waste Collected` (it is in the bin now, so `Tray Full` usually turns on until `Bin Emptied`), the litter that left counts in `Litter Discarded`, and `Litter Mass` becomes what stayed in the drum. Refill with maintenance mode as usual: its exit records the new litter mass.
+
+Stock also checks the flap and bin at the end (`dump_done HALL_OPEN err!`, `dump_done WASTEBOX_FULL!`); here the usual flap close check of the leveling tail covers the full bin.
+
+Validated on hardware on 22 November 2026.
+
 ## Who stops the motors
 
 Every ordinary move now carries a destination, so the MCU stops it itself; ESPHome no longer sends a stop when it sees a hall sensor.

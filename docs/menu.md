@@ -14,14 +14,16 @@ The two buttons drive a menu shaped like the stock one. Each page shows an icon 
 |---|---|---|
 | Clean | turns `Clean` on | 22, process 0 |
 | Level | presses `Level` | 24, process 4 (smooth) |
+| Empty Litter | asks to confirm ("OK to empty", 10 s); a second OK turns `Empty Litter` on | 23, process 1, not in the stock menu ([details](motion.md#empty-litter)) |
 | Maintenance | toggles `Maintenance` | 26, process 9 |
 | Bin Emptied | presses `Bin Emptied` | none: replaces stock page 18 (process 3, drum reset) |
 | Wi-Fi | shows the fallback AP QR code for 60 s; any button closes it | 17, starts the PetKit app pairing (page 27) |
 
-The menu closes after 10 s without a press, like the stock pages (timeout `0x2710` ms in the page table). It does not open while a cleaning runs or during an OTA, and closes if one starts. The actions keep their own safety checks: an item refused by a check (pet, cover, bin, full bin, motor error) simply does nothing.
+The menu closes after 10 s without a press, like the stock pages (timeout `0x2710` ms in the page table). It does not open while a cleaning, the litter emptying or an OTA runs, and closes if one starts. The actions keep their own safety checks: an item refused by a check (pet, cover, bin, full bin, motor error) simply does nothing.
 
 Differences with stock:
 - The stock drum reset (process 3) brings the drum back to its start position; `Level` already does that here, so the item is replaced by `Bin Emptied`, which otherwise needs Home Assistant.
+- `Empty Litter` is added after `Level`. Its stock page (23, `i_dmp`/`s_dmp`) exists but no menu transition reaches it in this build: stock starts it from the app only. Since it tips all the litter into the bin, the menu asks for a second OK.
 - Stock Menu double click is the same event as a click (18); the former double click to enter maintenance is gone, maintenance is in the menu.
 - Stock Menu hold turns the software power off; here it still reboots.
 - Not reproduced: the child lock (pages 3 and 4), and the odor and light accessory pages (19 to 21), only reachable when an accessory is detected.

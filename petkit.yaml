@@ -130,8 +130,13 @@ substitutions:
   # Movement Blocked sensor may not be refreshed yet when Block Movement's own triggers run.
   movement_blocked: 'id(ota_state) || id(block_movement).state'
   # Local menu (menu_page global): 0 closed, 1..menu_items the items in stock order, then the Wi-Fi QR code
-  menu_items: '5'
-  menu_wifi_qr: '6'
+  # and the Empty Litter confirmation
+  menu_items: '6'
+  menu_empty_litter: '3'
+  menu_wifi_qr: '7'
+  menu_empty_confirm: '8'
+  # A drum move, a cleaning or the litter emptying is running: the menu stays closed meanwhile
+  busy: 'id(ota_state) || id(clean).state || id(empty_litter).state'
 
 qr_code:
   id: qrcode_ap
@@ -164,6 +169,11 @@ image:
 
   - id: icon_maintenance
     file: mdi:progress-wrench
+    type: binary
+    resize: 96x96
+
+  - id: icon_empty
+    file: mdi:delete-sweep
     type: binary
     resize: 96x96
 
@@ -218,6 +228,11 @@ image:
     type: binary
     resize: 64x64
 
+  - id: icon_menu_empty
+    file: mdi:delete-sweep
+    type: binary
+    resize: 64x64
+
   - id: icon_menu_maintenance
     file: mdi:progress-wrench
     type: binary
@@ -255,19 +270,21 @@ display:
       uint8_t scale = min(it.get_width(), it.get_height()) / id(qrcode_ap).get_size();
       it.qr_code((it.get_width() - id(qrcode_ap).get_size()*scale)/2, (it.get_height() - id(qrcode_ap).get_size()*scale)/2, id(qrcode_ap), COLOR_ON, scale);
     } else if (id(menu_page)) {
-      static const char *const labels[] = {"Clean", "Level", "Maintenance", "Bin Emptied", "Wi-Fi"};
-      BaseImage *const icons[] = {id(icon_menu_clean), id(icon_menu_level), id(icon_menu_maintenance), id(icon_menu_bin), id(icon_menu_wifi)};
-      const int item = id(menu_page) - 1, count = ${menu_items};
+      static const char *const labels[] = {"Clean", "Level", "Empty Litter", "Maintenance", "Bin Emptied", "Wi-Fi"};
+      BaseImage *const icons[] = {id(icon_menu_clean), id(icon_menu_level), id(icon_menu_empty), id(icon_menu_maintenance), id(icon_menu_bin), id(icon_menu_wifi)};
+      const bool confirm = id(menu_page) == ${menu_empty_confirm};  // Empty Litter asks for a second OK
+      const int item = (confirm ? ${menu_empty_litter} : id(menu_page)) - 1, count = ${menu_items};
       for (int i = 0; i < count; i++) {  // position in the menu
         int x = it.get_width()/2 + (2*i - (count - 1)) * 6;
         if (i == item) it.filled_circle(x, 5, 3);
         else it.circle(x, 5, 2);
       }
       it.image(it.get_width()/2, 14, icons[item], ImageAlign::TOP_CENTER);
-      it.print(it.get_width()/2, it.get_height(), id(font_label), TextAlign::BOTTOM_CENTER, labels[item]);
-    } else if (id(clean).state || (id(maintenance).state && millis() % 5000 < 1500) || (id(level_needed) && (!id(maintenance).state))) {
+      it.print(it.get_width()/2, it.get_height(), id(font_label), TextAlign::BOTTOM_CENTER, confirm ? "OK to empty" : labels[item]);
+    } else if (id(clean).state || id(empty_litter).state || (id(maintenance).state && millis() % 5000 < 1500) || (id(level_needed) && (!id(maintenance).state))) {
       BaseImage *icon = id(approach).state?id(icon_problem):
                         id(clean).state?id(icon_clean):
+                        id(empty_litter).state?id(icon_empty):
                         id(maintenance).state?id(icon_maintenance):
                         id(level_needed)?id(icon_level):nullptr;
 
@@ -311,6 +328,14 @@ globals:
 
   - id: menu_at  # millis() of the last menu button press, for the timeout
     type: uint32_t
+    initial_value: '0'
+
+  - id: empty_step  # Empty Litter: drum moves done out of 7 (stock process 1), -1 when it failed
+    type: int
+    initial_value: '0'
+
+  - id: empty_weight_start  # Empty Litter: weight before, to count what went to the bin
+    type: float
     initial_value: '0'
 
   - id: weight_zero
@@ -405,6 +430,11 @@ sensor:
                     switch.is_on: clean
                   then:
                     switch.turn_off: clean
+              - if:
+                  condition:
+                    switch.is_on: empty_litter
+                  then:
+                    switch.turn_off: empty_litter
     drum_current:
       name: Drum Current
       disabled_by_default: yes
@@ -611,6 +641,17 @@ sensor:
     disabled_by_default: yes
     update_interval: 1s
     lambda: return id(cleans_left);
+
+  - platform: template
+    name: Empty Litter Progress  # stock shows a percentage too, counted from the steps done, not from the weight
+    icon: mdi:delete-sweep
+    unit_of_measurement: '%'
+    accuracy_decimals: 0
+    update_interval: 1s
+    filters:
+      - delta: 1
+    lambda: |-
+      return id(empty_litter).state ? max(0, id(empty_step)) * 100 / 7 : 0;
 
   - platform: pulse_counter
     id: mcu_interrupts
@@ -855,6 +896,7 @@ binary_sensor:
                   all:
                     - switch.is_off: clean
                     - switch.is_off: maintenance
+                    - switch.is_off: empty_litter  # only passing level on its way between dump and smooth
                   then:  # the MCU stops at level itself (pos: level)
                     - if:
                         all:
@@ -980,7 +1022,7 @@ binary_sensor:
       inverted: yes
     on_click:  # stock: opens the menu, then steps through it; after the last item it closes
       lambda: |-
-        if (id(ota_state) || id(clean).state) return;
+        if (${busy}) return;
         id(menu_page) = id(menu_page) >= ${menu_items} ? 0 : id(menu_page) + 1;
         id(menu_at) = millis();
     on_multi_click:
@@ -1003,13 +1045,15 @@ binary_sensor:
         then:  # stock: OK starts the selected item; the actions keep their own safety checks
           lambda: |-
             const int page = id(menu_page);
-            id(menu_page) = page == ${menu_items} ? ${menu_wifi_qr} : 0;
+            id(menu_page) = page == ${menu_items} ? ${menu_wifi_qr} :
+                            page == ${menu_empty_litter} ? ${menu_empty_confirm} : 0;
             id(menu_at) = millis();
             switch (page) {
               case 1: id(clean).turn_on(); break;
               case 2: id(level).press(); break;
-              case 3: id(maintenance).toggle(); break;
-              case 4: id(bin_emptied_button).press(); break;
+              case 4: id(maintenance).toggle(); break;
+              case 5: id(bin_emptied_button).press(); break;
+              case ${menu_empty_confirm}: id(empty_litter).turn_on(); break;
             }
         else:
           button.press: level
@@ -1133,6 +1177,7 @@ switch:
       if:
         all:
           - switch.is_off: maintenance
+          - switch.is_off: empty_litter
           - binary_sensor.is_off: approach
           - binary_sensor.is_off: pet_inside
           - binary_sensor.is_off: cover
@@ -1207,6 +1252,7 @@ switch:
       if:
         all:
           - switch.is_off: clean
+          - switch.is_off: empty_litter
           - lambda: return !(${movement_blocked});
           - binary_sensor.is_off: cover
           - binary_sensor.is_off: bin
@@ -1261,6 +1307,50 @@ switch:
           id: level_needed
           value: 'true'
       - script.execute: level_if_needed
+
+  - platform: template
+    id: empty_litter
+    name: Empty Litter
+    icon: mdi:delete-sweep
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:  # stock process 1: tips all the litter into the waste bin
+      if:
+        all:
+          - switch.is_off: clean
+          - switch.is_off: maintenance
+          - binary_sensor.is_off: approach
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
+          - binary_sensor.is_off: tray_full  # the litter would not fit in a full bin
+          - lambda: return !id(motor_error);
+          - not:
+              script.is_running: empty_litter_run
+        then:
+          - script.stop: clean_if_needed
+          - script.execute: empty_litter_run
+        else:
+          - delay: 0s  # yield
+          - switch.turn_off: empty_litter
+    turn_off_action:
+      if:
+        condition:  # a refused start never ran the recipe: nothing to undo
+          script.is_running: empty_litter_run
+        then:
+          - script.stop: empty_litter_run
+          - pkt4_mcu.motor:
+              motor: drum
+              mode: stop
+          - if:
+              condition:  # stock ends with its leveling tail: via smooth back to level, then the flap closes
+                lambda: return !id(motor_error);
+              then:
+                - globals.set:
+                    id: level_needed
+                    value: 'true'
+                - script.execute: level_if_needed
 
   - platform: template
     id: do_auto_clean
@@ -1504,9 +1594,10 @@ script:
     then:
       - delay: 0s  # yield
       - if:
-          any:  # maintenance keeps the drum where it is until it's turned off
+          any:  # maintenance keeps the drum where it is until it's turned off; Empty Litter drives it itself
             - lambda: return ${movement_blocked};
             - switch.is_on: maintenance
+            - switch.is_on: empty_litter
           then:
             - script.stop: level_if_needed
       - if:
@@ -1671,6 +1762,133 @@ script:
           value: 'false'
       - script.execute: level_if_needed
 
+  # Empty Litter, stock process 1 (recipe FUN_4011d998 case 1, 0x4011dda8): open the flap, then the drum goes
+  # up to dump and down to smooth, 4 times up and 3 times down, 500 ms apart, and ends at dump. Stock then appends
+  # its leveling tail (FUN_4011cd9c): via smooth back to level, flap closed; Empty Litter's turn_off_action does it.
+  - id: empty_litter_run
+    mode: single
+    then:
+      - delay: 0s  # yield: the switch publishes its state after its turn_on_action
+      - globals.set:
+          id: empty_step
+          value: '0'
+      - globals.set:
+          id: empty_weight_start
+          value: !lambda return max(0.f, id(weight).state);
+      - if:
+          condition:
+            not:
+              binary_sensor.is_on: tray
+          then:
+            - pkt4_mcu.motor:
+                motor: tray
+                direction: open
+                speed: 100
+                mode: time
+                timeout: 80
+                pos: open
+            - wait_until:
+                condition:
+                  binary_sensor.is_on: tray
+                timeout: 10s
+      - if:
+          condition:
+            not:
+              binary_sensor.is_on: tray
+          then:
+            - logger.log:
+                level: WARN
+                format: "Empty Litter: the flap didn't open"
+            - globals.set:
+                id: empty_step
+                value: '-1'
+      - while:
+          condition:
+            lambda: return id(empty_step) >= 0 && id(empty_step) < 7 && !id(motor_error);
+          then:
+            - wait_until:  # a pet, the cover or the bin pauses the recipe; a drum stall backs off first
+                all:
+                  - binary_sensor.is_off: approach
+                  - binary_sensor.is_off: pet_inside
+                  - binary_sensor.is_off: cover
+                  - binary_sensor.is_off: bin
+                  - lambda: return !(${movement_blocked}) && !id(drum_stall).is_running();
+            - if:
+                condition:
+                  lambda: return id(empty_step) % 2 == 0;
+                then:
+                  pkt4_mcu.motor:
+                    motor: drum
+                    direction: up
+                    speed: 100
+                    mode: time
+                    timeout: 1000
+                    pos: dump
+                else:
+                  pkt4_mcu.motor:
+                    motor: drum
+                    direction: down
+                    speed: 100
+                    mode: time
+                    timeout: 1000
+                    pos: smooth
+            - wait_until:
+                condition:
+                  lambda: |-
+                    return (id(empty_step) % 2 == 0 ? id(drum_up).state : id(drum_down).state) ||
+                           id(approach).state || id(pet_inside).state || id(cover).state || id(bin).state ||
+                           ${movement_blocked} || id(motor_error) || id(drum_stall).is_running();
+                timeout: 120s
+            - if:
+                condition:
+                  lambda: |-
+                    return id(empty_step) % 2 == 0 ? id(drum_up).state : id(drum_down).state;
+                then:
+                  - globals.set:
+                      id: empty_step
+                      value: !lambda return id(empty_step) + 1;
+                  - delay: 500ms
+                else:
+                  if:
+                    condition:  # neither reached nor interrupted: give up rather than loop
+                      lambda: |-
+                        return !(id(approach).state || id(pet_inside).state || id(cover).state || id(bin).state ||
+                                 ${movement_blocked} || id(motor_error) || id(drum_stall).is_running());
+                    then:
+                      - logger.log:
+                          level: WARN
+                          format: "Empty Litter: drum move %d didn't reach its position"
+                          args: [id(empty_step)]
+                      - globals.set:
+                          id: empty_step
+                          value: '-1'
+      - if:
+          condition:
+            lambda: return id(empty_step) == 7;
+          then:
+            script.execute: empty_litter_done
+      - switch.turn_off: empty_litter
+
+  - id: empty_litter_done  # once back at level: what left the drum went to the bin
+    mode: single
+    then:
+      - wait_until:
+          condition:
+            all:
+              - binary_sensor.is_off: drum_level
+              - binary_sensor.is_off: cover
+              - lambda: return !id(level_needed);
+          timeout: 5min
+      - delay: 5s  # let the weight settle
+      - lambda: |-
+          const float now = max(0.f, id(weight).state),
+                      emptied = max(0.f, id(empty_weight_start) - now);
+          id(waste_collected) += emptied;  // litter and waste are now in the bin: Tray Full until it's emptied
+          id(litter_discarded) += max(0.f, id(litter_mass) - now);
+          id(litter_mass) = now;  // whatever stayed in the drum
+          id(waste_pending) = 0;
+          ESP_LOGI("empty_litter", "Emptied %.2f kg into the bin, %.2f kg left in the drum", emptied, now);
+
   - id: auto_clean
     then:
       if:
@@ -1678,6 +1896,7 @@ script:
           - switch.is_on: do_auto_clean
           - switch.is_off: clean
           - switch.is_off: maintenance
+          - switch.is_off: empty_litter
           - binary_sensor.is_off: pet_inside
           - binary_sensor.is_off: tray_full
           - lambda: return !id(motor_error);
@@ -1750,6 +1969,11 @@ script:
                       switch.is_on: clean
                     then:
                       switch.turn_off: clean
+                - if:
+                    condition:
+                      switch.is_on: empty_litter
+                    then:
+                      switch.turn_off: empty_litter
                 - globals.set:
                     id: level_needed
                     value: 'true'
@@ -1763,6 +1987,7 @@ script:
           - lambda: return id(ha_time).now().is_valid();
           - switch.is_off: clean
           - switch.is_off: maintenance
+          - switch.is_off: empty_litter
           - switch.is_off: motor_drum_up
           - switch.is_off: motor_drum_down
           - binary_sensor.is_off: tray
@@ -1805,7 +2030,7 @@ interval:
     then:
       lambda: |-
         if (!id(menu_page)) return;
-        if (id(clean).state || id(ota_state) ||
+        if (${busy} ||
             millis() - id(menu_at) >= (id(menu_page) == ${menu_wifi_qr} ? 60000u : 10000u))
           id(menu_page) = 0;
 
