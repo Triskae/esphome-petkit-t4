@@ -14,7 +14,8 @@ Behaves like the stock firmware:
 - Leveling and maintenance moves following the stock recipes, every drum and flap stop done by the MCU ([details](#motion))
 - Full waste bin detected from a failed flap close ([details](#full-waste-bin-and-motor-errors))
 - Abnormal motor stops handled as stock: drum stall back-off and retries, flap close retry ([details](#full-waste-bin-and-motor-errors))
-- Local menu like stock: Menu steps through Clean, Level, Maintenance, Bin Emptied and Wi-Fi, OK starts the item ([details](docs/menu.md))
+- Local menu like stock: Menu steps through Clean, Level, Empty Litter, Maintenance, Bin Emptied and Wi-Fi, OK starts the item ([details](docs/menu.md))
+- Empty Litter, the stock "dump litter" mode: tips all the litter into the waste bin, from Home Assistant or the menu ([details](docs/motion.md#empty-litter))
 
 Extra features:
 - Native Home Assistant integration: settings, manual motor controls and many internal sensors (motor positions, stop codes, weight, presence)
@@ -51,6 +52,7 @@ The drum and the waste flap are driven the way the stock firmware does it: each 
 | Cleaning | `pos: dump` → 3 s pause → `pos: smooth` → 1.5 s pause → `pos: level` |
 | Leveling | `pos: level`; from the dump side it goes past level to smooth first, then back to level |
 | Maintenance | flap closed, then a relative move up ([details](docs/motion.md#maintenance-before--after)) |
+| Empty Litter | flap open, then `pos: dump` / `pos: smooth` 4 and 3 times, 0.5 s apart, then the leveling ([details](docs/motion.md#empty-litter)) |
 
 ESPHome only sends stops for safety (pet, cover, bin, `Block Movement`, OTA) or when a command is turned off ([details](docs/motion.md#who-stops-the-motors)). When a pet is detected in front of the entrance, the MCU's own proximity protection stops the drum by itself; ESPHome also stops it on `Pet Inside` (weight) and resumes once `Approach` has been off for 5 s ([details](docs/motion.md#stopping-the-drum-when-a-pet-is-detected)).
 
@@ -87,7 +89,8 @@ The factory calibration of each unit can be extracted from a stock flash dump wi
 ## Documentation
 
 - [docs/cleaning.md](docs/cleaning.md): automatic cleaning decision, full waste bin, comparison with the stock firmware.
-- [docs/motion.md](docs/motion.md): drum and flap commands, destinations, abnormal stops, fixes and hardware tests.
+- [docs/motion.md](docs/motion.md): drum and flap commands, destinations, abnormal stops, Empty Litter, fixes and hardware tests.
+- [docs/menu.md](docs/menu.md): local menu, buttons, and the stock pages it follows.
 - [docs/mcu-protocol.md](docs/mcu-protocol.md): frame format, packet types, status bits, sensor words, init sequence, heartbeat and link supervision.
 - [Install guide](https://triskae.github.io/esphome-petkit-t4/) ([`index.html`](index.html), shared code in [`site/`](site)): wiring, backup, configuration, flashing, restore.
 - [docs/stock-calibration.md](docs/stock-calibration.md): factory weight calibration and the tools (Python script, browser page) that extract it from a stock flash dump.
@@ -111,6 +114,7 @@ Motion ([docs/motion.md](docs/motion.md)):
 * [x] Abnormal stops handled as stock: drum stall back-off, timeouts raise `Motor Error`, flap close retried once (validated on hardware)
 * [x] `Block Movement` blocks every move on its own
 * [x] A cleaning interrupted by a pet at dump carries on, and an aborted OTA no longer blocks moves until a reboot
+* [ ] Empty Litter (stock process 1, "dump litter"): flap open, 7 drum moves between dump and smooth, leveling tail; pauses for a pet, cover or bin; from HA and the menu (to validate on hardware)
 * [ ] Resume an interrupted step where it stopped (stock keeps the step context, `FUN_4011c1ac`); a cleaning interrupted by a pet restarts from the way up to dump
 * [ ] Detect a failed flap opening (only a failed close is detected)
 * [ ] Leveling: 0.5 s pauses, final 30-step move, and the swing via smooth even when already level
@@ -118,6 +122,16 @@ Motion ([docs/motion.md](docs/motion.md)):
 * [ ] Recipe variants: flap homing before opening, relative moves and shakes (the selecting settings are not identified)
 * [ ] Scram mask switched per step (static `0x704C` for now)
 * [ ] Tune the timeouts and speeds
+
+Local controls ([docs/menu.md](docs/menu.md)):
+* [x] Local menu like stock: Menu steps through the items, OK starts the selected one, closes after 10 s without a press
+* [x] Menu items call the same switches and buttons as Home Assistant, so every safety check applies
+* [x] `Bin Emptied` in the menu instead of the stock drum reset (which `Level` already covers)
+* [x] Wi-Fi item shows the fallback AP QR code (stock starts the PetKit app pairing)
+* [ ] `Empty Litter` in the menu, with a second OK to confirm (to validate on hardware)
+* [ ] Child lock (stock pages 3 and 4)
+* [ ] Software power off on a long Menu press, as stock (it reboots instead)
+* [ ] Odor and light accessory pages (only shown by stock when an accessory is detected)
 
 MCU link ([docs/mcu-protocol.md](docs/mcu-protocol.md)):
 * [x] All packet types sent by the MCU identified; motor statuses decoded and exposed to HA
