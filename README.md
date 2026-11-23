@@ -14,7 +14,7 @@ The firmware lives in [`t4.yaml`](t4.yaml) and has no secrets in it. [`petkit.ya
 1. In the Device Builder, open *Secrets* (top right) and add the six lines of your `secrets.yaml`: `wifi_ssid`, `wifi_password`, `ap_ssid`, `ap_password`, `ota_password` and `api_encryption_key`.
    - **Use the same values**: the Builder needs that OTA password to update the device, and Home Assistant needs that API key to keep talking to it.
    - If those names are already taken, rename them and use the new names below.
-2. If the litter box shows up as *Discovered* with an *Adopt* button, **don't adopt it**: that would import another configuration. Click *Ignore*.
+2. A litter box flashed before with the original egormanga repository, or with an older version of this one, may show up as *Discovered* with an *Adopt* button. **Don't adopt it**: that would import the egormanga configuration. Click *Ignore*. Once installed from the Builder, it no longer shows up that way.
 3. Click *New device*, then *Continue*, name it `petkit-t4`, pick *ESP32*, and close the dialog without installing.
 4. On the `petkit-t4` card, click *Edit*, replace the whole content with this, and *Save*:
 

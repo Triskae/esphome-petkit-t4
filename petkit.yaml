@@ -2,9 +2,6 @@
 # The firmware itself is in t4.yaml; this file adds your secrets.yaml and the local component.
 # To build from the ESPHome Device Builder instead, see README "Installing from the ESPHome Device Builder".
 
-dashboard_import:
-  package_import_url: github://egormanga/esphome-petkit-t4/petkit.yml
-
 substitutions:
   t4_component_source: ./components
   ap_ssid: !secret ap_ssid

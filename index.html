@@ -247,7 +247,7 @@ cd esphome-petkit-t4</pre></li>
 		<p>Optional. Instead of <code>esphome run petkit.yaml</code> from your computer, the ESPHome Device Builder (the ESPHome add-on of Home Assistant) can keep the litter box up to date: it pulls the firmware from this repository and updates it over Wi-Fi when ESPHome or the firmware gets a new version.</p>
 		<ol>
 			<li>Open the ESPHome Device Builder, then <em>Secrets</em> (top right). Add the six lines of your <code>secrets.yaml</code> from step 5: <code>wifi_ssid</code>, <code>wifi_password</code>, <code>ap_ssid</code>, <code>ap_password</code>, <code>ota_password</code>, <code>api_encryption_key</code>. <strong>Use the same values</strong>: the Builder needs that OTA password to update the device, and Home Assistant that API key to keep talking to it. Rename them if those names are already taken, and use the new names below.</li>
-			<li>If the litter box shows up as <em>Discovered</em> with an <em>Adopt</em> button, <strong>don't adopt it</strong>: that would import another configuration. Click <em>Ignore</em>.</li>
+			<li>A litter box flashed before with the original egormanga repository, or with an older version of this one, may show up as <em>Discovered</em> with an <em>Adopt</em> button. <strong>Don't adopt it</strong>: that would import the egormanga configuration. Click <em>Ignore</em>. Once installed from the Builder, it no longer shows up that way.</li>
 			<li>Click <em>New device</em>, then <em>Continue</em>, name it <code>petkit-t4</code>, pick <em>ESP32</em>, and close the dialog without installing anything.</li>
 			<li>On the new <code>petkit-t4</code> card, click <em>Edit</em>, replace the whole content with this, and <em>Save</em>:
 <pre>substitutions:
