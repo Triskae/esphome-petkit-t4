@@ -165,3 +165,16 @@ Pets:
 - @egormanga for the [original firmware](https://github.com/egormanga/esphome-petkit-t4) this fork builds on.
 - @earlynerd with his [repo](https://github.com/earlynerd/petkit-pura-max-serial-bus) for the pioneering and _enormous_ help in the reverse engineering.
 - @dwyschka for the idea and the upstart (earlynerd/petkit-pura-max-serial-bus#1).
+
+
+## Disclaimer
+
+This is an independent, unofficial community project. It is not affiliated with, endorsed by, sponsored by or supported by PETKIT or any of its subsidiaries or partners.
+
+PETKIT, PURA MAX, T4 and the related names, logos and product designs are trademarks or registered trademarks of their respective owners. They are used here only to identify the hardware this firmware is meant for (nominative use). No affiliation is implied.
+
+This repository contains no PETKIT code, firmware, binaries, keys or other proprietary material. The behaviour of the original firmware was studied on a device owned by the authors, for the sole purpose of interoperability: running the device with open-source software and controlling it locally. The documentation describes that behaviour in the authors' own words; the addresses and identifiers it cites only point to where that behaviour was observed. The calibration tools read values from the user's own backup, in the browser or on their computer, and never ship any. All code here is original.
+
+Use at your own risk. Opening the device, flashing a custom firmware or modifying the hardware will most likely void your warranty, and may damage the device or harm the animals using it: this firmware drives motors in a device your pet goes into. Always keep a backup of the original firmware, never leave a pet near the litter box while testing, and keep the safety checks enabled. The software is provided "as is", without warranty of any kind, and the authors accept no liability for any damage or loss arising from its use.
+
+If you are a rights holder and believe something here infringes your rights, please open an issue and it will be looked at promptly.
