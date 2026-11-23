@@ -7,6 +7,32 @@ It's able to work completely offline & without HA, although it's recommended to 
 **Installing:** follow the [interactive install guide](https://triskae.github.io/esphome-petkit-t4/) (backup, calibration extraction, `secrets.yaml`, flashing and restore from the browser), source in [`index.html`](index.html).
 
 
+## Installing from the ESPHome Device Builder
+
+The firmware lives in [`t4.yaml`](t4.yaml) and has no secrets in it. [`petkit.yaml`](petkit.yaml) only adds your `secrets.yaml`, for local builds. To build from the ESPHome Device Builder (the Home Assistant add-on), paste this as the device config. The Builder then pulls the firmware from this repository:
+
+```yaml
+substitutions:
+  ap_ssid: !secret ap_ssid
+  ap_password: !secret ap_password
+  ota_password: !secret ota_password
+  api_encryption_key: !secret api_encryption_key
+
+packages:
+  t4:
+    url: https://github.com/Triskae/esphome-petkit-t4
+    ref: master
+    refresh: 0s
+    files: [t4.yaml]
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+```
+
+`refresh: 0s` fetches the latest version on every validation or install. Set a commit or a tag in `ref` to stay on a fixed version.
+
+
 ## Features
 
 Behaves like the stock firmware:

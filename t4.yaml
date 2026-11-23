@@ -1,0 +1,2102 @@
+# Petkit T4 ESPHome Firmware: the whole firmware, without secrets.
+# Use it through petkit.yaml (local build with secrets.yaml), or as a GitHub package from the
+# ESPHome Device Builder: see README "Installing from the ESPHome Device Builder".
+# Required substitutions: api_encryption_key, ota_password. Optional: ap_ssid, ap_password,
+# t4_component_source.
+
+esphome:
+  name: petkit-t4
+  friendly_name: Petkit T4
+  project:
+    name: egormanga.esphome-petkit-t4
+    version: 0.12.0
+  platformio_options:
+    board_upload.maximum_size: 0x800000
+
+external_components:
+  - source: ${t4_component_source}
+    components: [pkt4_mcu]
+  - source: github://egormanga/esphome-bm8563
+
+esp32:
+  variant: esp32
+  flash_size: 8MB
+
+wifi:
+  id: wifi_
+  fast_connect: on
+  ap:
+    ssid: ${ap_ssid}
+    password: ${ap_password}
+  power_save_mode: none
+  reboot_timeout: 0s  # never
+  on_connect:
+    rtttl.play: :d=16,o=6,b=100:e,g
+  on_disconnect:
+    rtttl.play: :d=16,o=6,b=100:g,e
+
+captive_portal:
+
+#esp32_improv:
+#  authorizer: none
+
+ota:
+  platform: esphome
+  password: ${ota_password}
+  on_state_change:
+    - pkt4_mcu.motor:
+        motor: drum
+        mode: stop
+    - globals.set:  # only a running update blocks moves: an aborted or failed one doesn't reboot
+        id: ota_state
+        value: !lambda return state == ota::OTA_STARTED || state == ota::OTA_IN_PROGRESS;
+    - component.update: oled
+    - if:
+        condition:
+          lambda: return state == ota::OTA_ABORT || state == ota::OTA_ERROR;
+        then:
+          script.execute: level_if_needed  # finish what the update interrupted (a completed one reboots)
+
+api:
+  encryption:
+    key: ${api_encryption_key}
+  reboot_timeout: 0s  # never
+
+logger:
+  hardware_uart: UART1
+  baud_rate: 0  # disable
+
+uart:
+  tx_pin: GPIO1
+  rx_pin: GPIO3
+  baud_rate: 115200
+  rx_buffer_size: 2048  # default 256 B (~22 ms at 115200) overflows during boot/API bursts
+  debug:
+    direction: TX
+    after:
+      bytes: 0x100
+      timeout: 10ms
+    sequence:
+      lambda: UARTDebug::log_hex(direction, bytes, ' ');
+
+power_supply:
+  - id: vreg_display
+    pin:
+      number: GPIO2
+      ignore_strapping_warning: yes
+    enable_on_boot: yes
+
+  - id: vreg_bus
+    pin: GPIO26
+    enable_on_boot: yes
+
+  - id: vreg_bus_rev2
+    pin: GPIO27
+    enable_on_boot: yes
+
+output:
+  - platform: ledc
+    id: beeper
+    pin: GPIO16
+
+i2c:
+  sda:
+    number: GPIO15
+    ignore_strapping_warning: yes
+  scl: GPIO4
+  scan: no
+
+spi:
+  mosi_pin: GPIO23
+  clk_pin: GPIO18
+
+time:
+  - platform: bm8563
+    update_interval: never
+
+  - platform: homeassistant
+    id: ha_time
+    on_time_sync:
+      bm8563.write_time:
+
+rtttl:
+  output: beeper
+  gain: 50%  # PWM duty
+
+substitutions:
+  # Defaults; petkit.yaml and the Device Builder config override them.
+  t4_component_source: github://Triskae/esphome-petkit-t4@master
+  ap_ssid: Petkit T4
+  ap_password: petkit-t4
+  # Any move is forbidden during an OTA or with Block Movement on. Read the states directly: the
+  # Movement Blocked sensor may not be refreshed yet when Block Movement's own triggers run.
+  movement_blocked: 'id(ota_state) || id(block_movement).state'
+  # Local menu (menu_page global): 0 closed, 1..menu_items the items in stock order, then the Wi-Fi QR code
+  # and the Empty Litter confirmation
+  menu_items: '6'
+  menu_empty_litter: '3'
+  menu_maintenance: '4'
+  menu_wifi_qr: '7'
+  menu_empty_confirm: '8'
+  # A drum move, a cleaning or the litter emptying is running: the menu stays closed meanwhile
+  busy: 'id(ota_state) || id(clean).state || id(empty_litter).state'
+
+qr_code:
+  id: qrcode_ap
+  value: "WIFI:S:${ap_ssid};T:WPA;P:${ap_password};;"
+
+font:
+  - id: font_weight
+    file:
+      type: gfonts
+      family: Ubuntu Mono
+    size: 48
+
+  - id: font_label  # menu item names; 11 characters fit the 128 px width
+    file:
+      type: gfonts
+      family: Ubuntu Mono
+    size: 20
+    glyphs: " -.ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+image:
+  - id: icon_logo
+    file: mdi:inbox
+    type: binary
+    resize: 96x96
+
+  - id: icon_clean
+    file: mdi:recycle
+    type: binary
+    resize: 96x96
+
+  - id: icon_maintenance
+    file: mdi:progress-wrench
+    type: binary
+    resize: 96x96
+
+  - id: icon_empty
+    file: mdi:delete-sweep
+    type: binary
+    resize: 96x96
+
+  - id: icon_level
+    file: mdi:spirit-level
+    type: binary
+    resize: 96x96
+
+  - id: icon_tray
+    file: mdi:tray-alert
+    type: binary
+    resize: 96x96
+
+  - id: icon_auto_clean
+    file: mdi:recycle-variant
+    type: binary
+    resize: 96x96
+
+  - id: icon_problem
+    file: mdi:alert
+    type: binary
+    resize: 96x96
+
+  - id: icon_tray_full
+    file: mdi:tray-full
+    type: binary
+    resize: 96x96
+
+  - id: icon_ota
+    file: mdi:progress-download
+    type: binary
+    resize: 96x96
+
+  - id: icon_weight
+    file: mdi:weight-kilogram
+    type: binary
+    resize: 64x64
+
+  - id: icon_waste
+    file: mdi:liquid-spot
+    type: binary
+    resize: 64x64
+
+  # Menu items, drawn above their name like the stock menu pages
+  - id: icon_menu_clean
+    file: mdi:recycle
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_level
+    file: mdi:spirit-level
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_empty
+    file: mdi:delete-sweep
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_maintenance
+    file: mdi:progress-wrench
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_bin
+    file: mdi:delete-restore
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_wifi
+    file: mdi:wifi
+    type: binary
+    resize: 64x64
+
+  - id: icon_menu_alert  # above the reason of a refused start
+    file: mdi:alert
+    type: binary
+    resize: 64x64
+
+display:
+  platform: ssd1306_spi
+  id: oled
+  model: 'SH1107 128x128'
+  cs_pin:
+    number: GPIO5
+    ignore_strapping_warning: yes
+  dc_pin: GPIO19
+  reset_pin: GPIO17
+  data_rate: 40MHz  # max
+  external_vcc: true
+  #power_supply: vreg_oled_bias
+  rotation: 180°
+  update_interval: 0.01s
+  lambda: |-
+    static uint16_t clip = 0;
+
+    if (id(ota_state)) it.image(it.get_width()/2, it.get_height()/2, id(icon_ota), ImageAlign::CENTER);
+    else if (id(menu_page) == ${menu_wifi_qr}) {
+      uint8_t scale = min(it.get_width(), it.get_height()) / id(qrcode_ap).get_size();
+      it.qr_code((it.get_width() - id(qrcode_ap).get_size()*scale)/2, (it.get_height() - id(qrcode_ap).get_size()*scale)/2, id(qrcode_ap), COLOR_ON, scale);
+    } else if (id(menu_page)) {
+      static const char *const labels[] = {"Clean", "Level", "Empty Litter", "Maintenance", "Bin Emptied", "Wi-Fi"};
+      BaseImage *const icons[] = {id(icon_menu_clean), id(icon_menu_level), id(icon_menu_empty), id(icon_menu_maintenance), id(icon_menu_bin), id(icon_menu_wifi)};
+      const bool confirm = id(menu_page) == ${menu_empty_confirm};  // Empty Litter asks for a second OK
+      const int item = (confirm ? ${menu_empty_litter} : id(menu_page)) - 1, count = ${menu_items};
+      for (int i = 0; i < count; i++) {  // position in the menu
+        int x = it.get_width()/2 + (2*i - (count - 1)) * 6;
+        if (i == item) it.filled_circle(x, 5, 3);
+        else it.circle(x, 5, 2);
+      }
+      it.image(it.get_width()/2, 14, icons[item], ImageAlign::TOP_CENTER);
+      const char *label = confirm ? "OK to empty" :
+                          item == ${menu_maintenance} - 1 && id(maintenance).state ? "End Maint." :  // OK toggles it
+                          labels[item];
+      it.print(it.get_width()/2, it.get_height(), id(font_label), TextAlign::BOTTOM_CENTER, label);
+    } else if (id(refused_at) && millis() - id(refused_at) < 5000) {  // a start refused by a safety check: say why
+      static const char *const reasons[] = {"Refused", "Pet inside", "Cover open", "Bin removed", "Bin full",
+                                            "Motor error", "Blocked", "Maintenance", "Busy", "Not level"};
+      it.image(it.get_width()/2, 14, id(icon_menu_alert), ImageAlign::TOP_CENTER);
+      it.print(it.get_width()/2, it.get_height(), id(font_label), TextAlign::BOTTOM_CENTER,
+               reasons[id(refused_reason) < 10 ? id(refused_reason) : 0]);
+    } else if (id(clean).state || id(empty_litter).state || (id(maintenance).state && millis() % 5000 < 1500) || (id(level_needed) && (!id(maintenance).state))) {
+      BaseImage *icon = id(approach).state?id(icon_problem):
+                        id(clean).state?id(icon_clean):
+                        id(empty_litter).state?id(icon_empty):
+                        id(maintenance).state?id(icon_maintenance):
+                        id(level_needed)?id(icon_level):nullptr;
+
+      it.start_clipping((it.get_width() - icon->get_width())/2 + (clip<icon->get_width()?clip:0), 0, clip>=icon->get_width()?((it.get_width() - icon->get_width())/2 + max(0, clip-icon->get_width())):it.get_width(), it.get_height());
+      if ((clip += 2) > icon->get_width()*2) clip = 0;
+
+      it.image(it.get_width()/2, it.get_height()/2, icon, ImageAlign::CENTER);
+      return;
+    } else if (id(cleaned_at) && millis() - id(cleaned_at) < 10000) {
+      it.image(it.get_width()/2, (it.get_height() - id(icon_waste).get_height())/2, id(icon_waste), ImageAlign::CENTER);
+      it.printf(it.get_width()/2, it.get_height(), id(font_weight), TextAlign::BOTTOM_CENTER, "%.0f", id(waste_collected)*1000);
+    } else if (id(tray_full).state && millis() % 5000 < 1000) {
+      it.image(it.get_width()/2, it.get_height()/2, id(icon_tray_full), ImageAlign::CENTER);
+    } else if (id(clean_pending).state && millis() % 5000 < 2000) {
+      it.image(it.get_width()/2, it.get_height()/2, id(icon_auto_clean), ImageAlign::CENTER);
+    } else if (id(maintenance).state || id(pet_weight).state > 0.01f) {
+      it.image(it.get_width()/2, (it.get_height() - id(icon_weight).get_height())/2, id(icon_weight), ImageAlign::CENTER);
+      it.printf(it.get_width()/2, it.get_height(), id(font_weight), TextAlign::BOTTOM_CENTER, "%.2f", id(maintenance).state?id(weight).state-id(waste_collected):id(pet_weight).state);
+    } else if (id(cover).state || id(bin).state || id(approach).state) {
+      it.image(it.get_width()/2, it.get_height()/2, id(icon_problem), ImageAlign::CENTER);
+    } else if (id(tray).state || !id(tray).has_state()) {
+      it.image(it.get_width()/2, it.get_height()/2, id(icon_tray), ImageAlign::CENTER);
+    } else if (id(sensor_uptime).state < 10) {
+      it.image(it.get_width()/2, it.get_height()/2, id(icon_logo), ImageAlign::CENTER);
+    } else if (!id(wifi_).is_connected()) {
+      static uint8_t ii = 0;
+      uint8_t scale = (min(it.get_width(), it.get_height()) / id(qrcode_ap).get_size());
+      unsigned width = (it.get_width() - id(qrcode_ap).get_size()*scale),
+               height = (it.get_height() - id(qrcode_ap).get_size()*scale),
+               x = (++ii/8 % width),
+               y = (ii/8 / height);
+      it.qr_code(y%2?width-x:x, y, id(qrcode_ap), COLOR_ON, scale);
+    }
+
+    clip = 0;
+
+globals:
+  - id: menu_page  # see the menu_items substitution
+    type: int
+    initial_value: '0'
+
+  - id: menu_at  # millis() of the last menu button press, for the timeout
+    type: uint32_t
+    initial_value: '0'
+
+  - id: refused_at  # millis() when Clean or Empty Litter refused to start, to show why for 5 s (0: none)
+    type: uint32_t
+    initial_value: '0'
+
+  - id: refused_reason  # index in the display's reasons[] (see the refusal script)
+    type: int
+    initial_value: '0'
+
+  - id: clean_ran  # Clean really started: only then does its end show the waste summary
+    type: bool
+    initial_value: 'false'
+
+  - id: empty_step  # Empty Litter: drum moves done out of 7 (stock process 1), -1 when it failed
+    type: int
+    initial_value: '0'
+
+  - id: empty_weight_start  # Empty Litter: weight before, to count what went to the bin
+    type: float
+    initial_value: '0'
+
+  - id: weight_zero
+    type: int
+    initial_value: '7975680'
+    restore_value: yes
+
+  - id: weight_scale
+    type: float
+    initial_value: '-1/65536.f'
+    restore_value: yes
+
+  - id: litter_mass
+    type: float
+    restore_value: yes
+
+  - id: waste_collected
+    type: float
+    restore_value: yes
+
+  - id: litter_discarded
+    type: float
+    restore_value: yes
+
+  - id: waste_pending
+    type: float
+
+  - id: cleans_left
+    type: int
+
+  - id: visit_started_at
+    type: uint32_t
+
+  - id: visit_clean
+    type: bool
+
+  - id: smoothing  # a plain leveling is on its way to smooth: passing level isn't its end
+    type: bool
+
+  - id: motor_error  # stop code of a failed drum move (0: none); blocks cleanings until cleared
+    type: int
+
+  - id: drum_stall_retries
+    type: int
+
+  - id: tray_close_retried
+    type: bool
+
+  - id: bin_full  # the waste flap failed to close: cleared only by emptying the bin
+    type: bool
+    restore_value: yes
+
+  - id: mcu_rebooted_at  # UTC of the last weekly MCU reboot (0: not known yet)
+    type: uint32_t
+    restore_value: yes
+
+  - id: level_needed
+    type: bool
+
+  - id: ota_state
+    type: int
+
+  - id: cleaned_at
+    type: long
+
+pkt4_mcu:
+  id: mcu
+
+sensor:
+  - platform: pkt4_mcu
+    # Motor status feedback (0x3), see docs/motion.md
+    drum_position:
+      name: Drum Position
+    drum_stop_code:
+      id: drum_stop_code
+      name: Drum Stop Code
+      on_value:  # abnormal ends only; normal moves end with 0 or 1
+        - if:
+            condition:
+              lambda: return x == 4;  # stall: stock backs off and retries (FUN_4011d300)
+            then:
+              script.execute: drum_stall
+        - if:
+            condition:
+              lambda: return x == 17 || x == 18;  # timeout: stock stops the process with an error
+            then:
+              - globals.set:
+                  id: motor_error
+                  value: !lambda return x;
+              - if:
+                  condition:
+                    switch.is_on: clean
+                  then:
+                    switch.turn_off: clean
+              - if:
+                  condition:
+                    switch.is_on: empty_litter
+                  then:
+                    switch.turn_off: empty_litter
+    drum_current:
+      name: Drum Current
+      disabled_by_default: yes
+    tray_position:
+      id: tray_position
+      name: Tray Position
+    tray_stop_code:
+      id: tray_stop_code
+      name: Tray Stop Code
+      on_value:  # end of a flap close (position is published just before)
+        if:
+          condition:
+            lambda: return id(mcu).last_direction(1) == 2;
+          then:
+            if:
+              condition:
+                lambda: return id(tray_position).state == 9;  # closed
+              then:
+                globals.set:
+                  id: tray_close_retried
+                  value: 'false'
+              else:
+                if:
+                  all:  # a close interrupted on purpose (cover opened, bin removed, maintenance) doesn't mean a full bin
+                    - binary_sensor.is_off: cover
+                    - binary_sensor.is_off: bin
+                    - switch.is_off: maintenance
+                  then:
+                    if:
+                      condition:
+                        lambda: return !id(tray_close_retried);
+                      then:  # stock retries the flap before concluding (cause 5): reopen, level_if_needed closes it again
+                        - globals.set:
+                            id: tray_close_retried
+                            value: 'true'
+                        - pkt4_mcu.motor:
+                            motor: tray
+                            direction: open
+                            speed: 100
+                            mode: time
+                            timeout: 80
+                            pos: open
+                      else:
+                        - globals.set:
+                            id: tray_close_retried
+                            value: 'false'
+                        - globals.set:
+                            id: bin_full
+                            value: 'true'
+    distance:
+      name: Distance
+      entity_category: diagnostic
+      disabled_by_default: yes
+      filters:
+        - calibrate_polynomial:
+            degree: 3
+            datapoints:
+              - 8192 -> 0
+              - 1024 -> 1
+              - 256 -> 5
+              - 32 -> 10
+              #- 31 -> inf
+        - clamp:
+            max_value: 10
+        - delta: 0.5
+    weight:
+      id: weight
+      name: Weight
+      icon: mdi:scale
+      entity_category: diagnostic
+      disabled_by_default: yes
+      filters:
+        - offset: !lambda return -id(weight_zero);
+        - multiply: !lambda return id(weight_scale);
+        - delta: 0.005
+      on_value_range:
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state - .1f);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=32,o=6,b=100:g
+
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state - .05f);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=32,o=6,b=100:g,64p,g
+
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=32,o=6,b=100:g,64p,g,64p,g
+
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state + .1f);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=8,o=6,b=100:4g
+
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state + .25f);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=8,o=6,b=100:g,p,4g
+
+        - above: !lambda return (id(waste_collected) + id(litter_threshold).state + .5f);
+          then:
+            if:
+              condition:
+                switch.is_on: maintenance
+              then:
+                rtttl.play: :d=8,o=6,b=100:g,p,g,p,4g
+
+  - platform: template
+    id: pet_weight
+    name: Pet Weight
+    icon: mdi:paw
+    unit_of_measurement: kg
+    accuracy_decimals: 2
+    device_class: weight
+    state_class: measurement
+    update_interval: 1s
+    lambda: return (max(0.f, id(weight).state) - id(litter_mass) - id(waste_collected));
+    on_value_range:
+      above: !lambda return id(clean_threshold).state/1000.f;  # it's non-dumped waste
+      below: !lambda return id(pet_threshold).state;  # not the actual pet inside
+      then:
+        if:
+          condition:  # with Clean After Every Visit, waste weight doesn't trigger cleans
+            lambda: return id(cleans_left) <= 0 && !id(clean_every_visit).state;
+          then:
+            globals.set:
+              id: cleans_left
+              value: !lambda return id(clean_times).state;
+
+  - platform: template
+    id: pet_body_mass
+    name: Pet Body Mass
+    icon: mdi:scale-bathroom
+    unit_of_measurement: kg
+    accuracy_decimals: 1
+    device_class: weight
+    state_class: measurement
+    update_interval: 1s
+    lambda: |-
+      if (id(pet_inside).state) return id(pet_weight).state;
+      else return {};
+    filters:
+      - round: 2
+      - delta: 0  # deduplicate
+      - throttle: 10s
+      - clamp:
+          min_value: 1 #!lambda return id(pet_threshold).state;
+          ignore_out_of_range: yes
+      - filter_out: 0
+      - skip_initial: 1
+
+  - platform: template
+    name: Litter Mass
+    icon: mdi:bucket
+    unit_of_measurement: g
+    accuracy_decimals: 0
+    device_class: weight
+    state_class: measurement
+    update_interval: 1s
+    lambda: return id(litter_mass)*1000;
+
+  - platform: template
+    name: Waste Collected
+    icon: mdi:liquid-spot
+    unit_of_measurement: g
+    accuracy_decimals: 0
+    device_class: weight
+    state_class: measurement
+    update_interval: 1s
+    lambda: return id(waste_collected)*1000;
+
+  - platform: template
+    name: Litter Discarded
+    icon: mdi:delete-variant
+    unit_of_measurement: kg
+    accuracy_decimals: 2
+    device_class: weight
+    state_class: total_increasing
+    update_interval: 1s
+    lambda: return id(litter_discarded);
+
+  - platform: template
+    name: Cleans Left
+    icon: mdi:counter
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    disabled_by_default: yes
+    update_interval: 1s
+    lambda: return id(cleans_left);
+
+  - platform: template
+    name: Empty Litter Progress  # stock shows a percentage too, counted from the steps done, not from the weight
+    icon: mdi:delete-sweep
+    unit_of_measurement: '%'
+    accuracy_decimals: 0
+    update_interval: 1s
+    filters:
+      - delta: 1
+    lambda: |-
+      return id(empty_litter).state ? max(0, id(empty_step)) * 100 / 7 : 0;
+
+  - platform: pulse_counter
+    id: mcu_interrupts
+    pin:
+      number: GPIO22
+      allow_other_uses: yes
+    internal_filter: 0s
+    total:
+      name: MCU Interrupts
+      entity_category: diagnostic
+      disabled_by_default: yes
+
+  - platform: adc
+    name: 3V3
+    entity_category: diagnostic
+    disabled_by_default: yes
+    pin: GPIO32
+    attenuation: 12dB
+    filters:
+      multiply: 16
+
+  - platform: internal_temperature
+    name: Temperature
+    disabled_by_default: yes
+
+  - platform: wifi_signal
+    name: RSSI
+    disabled_by_default: yes
+
+  - platform: uptime
+    id: sensor_uptime
+    name: Uptime
+    icon: mdi:clock-start
+    disabled_by_default: yes
+
+  - platform: template
+    name: MCU Last Reboot
+    icon: mdi:restart
+    device_class: timestamp
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: |-
+      if (!id(mcu_rebooted_at)) return {};
+      return id(mcu_rebooted_at);
+
+text_sensor:
+  - platform: template
+    name: Drum Stop Reason
+    icon: mdi:information-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static float published = NAN;  // publish only on change
+      if (!id(drum_stop_code).has_state() || id(drum_stop_code).state == published) return {};
+      published = id(drum_stop_code).state;
+      return {esphome::pkt4_mcu::stop_reason(published)};
+
+  - platform: template
+    name: Tray Stop Reason
+    icon: mdi:information-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static float published = NAN;  // publish only on change
+      if (!id(tray_stop_code).has_state() || id(tray_stop_code).state == published) return {};
+      published = id(tray_stop_code).state;
+      return {esphome::pkt4_mcu::stop_reason(published)};
+
+  - platform: template
+    name: Motor Error Reason
+    icon: mdi:alert-circle-outline
+    entity_category: diagnostic
+    update_interval: 1s
+    lambda: |-
+      static int published = -1;  // publish only on change
+      if (id(motor_error) == published) return {};
+      published = id(motor_error);
+      if (!id(motor_error)) return {"None"};
+      return {esphome::pkt4_mcu::stop_reason(id(motor_error))};
+
+binary_sensor:
+  - platform: pkt4_mcu
+    approach:
+      id: approach
+      name: Approach
+      entity_category: diagnostic
+      filters:
+        delayed_off: 5s
+      on_press:
+        if:
+          condition:
+            switch.is_off: maintenance
+          then:
+            script.execute: emergency_stop
+      on_release:
+        if:
+          condition:  # a clean is pending: restart its delay, so it starts a full delay after the pet was last seen
+            script.is_running: clean_if_needed
+          then:
+            script.execute: clean_if_needed
+          else:
+            script.execute: auto_clean
+    bin:
+      id: bin
+      name: Bin
+      entity_category: diagnostic
+      on_press:
+        - if:
+            condition:
+              switch.is_off: maintenance
+            then:
+              pkt4_mcu.motor:
+               motor: tray
+               mode: stop
+        - if:
+            all:
+              - binary_sensor.is_off: cover
+              - not:
+                  binary_sensor.is_on: tray
+            then:
+              pkt4_mcu.motor:
+                motor: tray
+                direction: open
+                speed: 50
+                mode: time
+                timeout: 80
+                pos: open
+      on_release:
+        - delay: 5s
+        - if:
+            all:
+              - binary_sensor.is_off: bin
+              - binary_sensor.is_off: cover
+            then:
+              script.execute: bin_emptied
+    tray_close_failed:
+      id: tray_close_failed
+      name: Tray Close Failed
+      entity_category: diagnostic
+    link_lost:
+      name: MCU Link Lost
+      entity_category: diagnostic
+    handshake:
+      name: MCU Handshake
+      entity_category: diagnostic
+    cover:
+      id: cover
+      name: Cover
+      entity_category: diagnostic
+      on_press:
+        - pkt4_mcu.motor:
+            motor: drum
+            mode: stop
+        - pkt4_mcu.motor:
+            motor: tray
+            mode: stop
+      on_release:
+        script.execute: level_if_needed
+    drum_up:
+      id: drum_up
+      name: Drum Up
+      entity_category: diagnostic
+      on_press:  # the MCU stops at dump itself (pos: dump)
+        - switch.template.publish:
+            id: motor_drum_up
+            state: OFF
+        - if:
+            all:
+              - switch.is_on: clean  # only a cleaning dumps waste
+              - binary_sensor.is_off: pet_inside
+              - binary_sensor.is_off: cover
+            then:
+              - globals.set:
+                  id: waste_collected
+                  value: !lambda return id(waste_pending);
+              - globals.set:
+                  id: waste_pending
+                  value: '0'
+        - globals.set:
+            id: level_needed
+            value: 'true'
+        - delay: 3s  # stock pauses at dump to let the waste fall
+        - script.execute: level_if_needed
+    drum_down:
+      id: drum_down
+      name: Drum Down
+      entity_category: diagnostic
+      on_press:  # the MCU stops at smooth itself (pos: smooth)
+        - switch.template.publish:
+            id: motor_drum_down
+            state: OFF
+        - globals.set:
+            id: smoothing
+            value: 'false'
+        - if:
+            condition:
+              switch.is_on: clean
+            then:
+              switch.turn_off: clean
+        - if:
+            condition:
+              switch.is_on: maintenance
+            then:
+              switch.turn_off: maintenance
+        - globals.set:
+            id: level_needed
+            value: 'true'
+        - delay: 1500ms  # stock pauses at smooth before returning to level
+        - script.execute: level_if_needed
+    drum_level:
+      id: drum_level
+      name: Drum Level
+      entity_category: diagnostic
+      trigger_on_initial_state: yes
+      on_press:
+        - globals.set:
+            id: level_needed
+            value: 'true'
+        - if:
+            all:
+              - switch.is_on: clean
+              - binary_sensor.is_off: tray
+            then:
+              pkt4_mcu.motor:
+                motor: tray
+                direction: open
+                speed: 100
+                mode: time
+                timeout: 80
+                pos: open
+              # TODO: stop if opening failed
+      on_release:
+        - if:
+            condition:  # a leveling via smooth only passes level here: it ends when coming back up
+              lambda: return id(smoothing);
+            then:
+              globals.set:
+                id: smoothing
+                value: 'false'
+            else:
+              - if:
+                  all:
+                    - switch.is_off: clean
+                    - switch.is_off: maintenance
+                    - switch.is_off: empty_litter  # only passing level on its way between dump and smooth
+                  then:  # the MCU stops at level itself (pos: level)
+                    - if:
+                        all:
+                          - binary_sensor.is_off: cover
+                          - binary_sensor.is_on: tray
+                          - binary_sensor.is_off: bin
+                        then:
+                          pkt4_mcu.motor:
+                            motor: tray
+                            direction: close
+                            speed: 5
+                            mode: time
+                            timeout: 80
+                            pos: closed
+              - globals.set:
+                  id: level_needed
+                  value: 'false'
+              - globals.set:
+                  id: drum_stall_retries
+                  value: '0'
+              - if:
+                  condition:  # while cleaning, level is only passed on the way down: don't "resume" (it would send the drum back up)
+                    switch.is_off: clean
+                  then:
+                    script.execute: auto_clean
+    tray:
+      id: tray
+      name: Tray
+      entity_category: diagnostic
+      disabled_by_default: yes
+      trigger_on_initial_state: yes
+      on_press:  # open: tray moves now carry a destination, so the MCU stops the tray itself
+        if:
+          condition:
+            switch.is_on: clean
+          then:
+            switch.turn_on: clean  # restart
+          else:
+            script.execute: level_if_needed
+      on_release:
+        script.execute: level_if_needed
+
+  - platform: template
+    id: pet_inside
+    name: Pet Inside
+    icon: mdi:paw
+    device_class: occupancy
+    entity_category: diagnostic
+    condition:
+      all:
+        - switch.is_off: maintenance
+        - lambda: return id(pet_weight).state >= id(pet_threshold).state;
+    filters:
+      delayed_off: 5s
+    on_press:
+      - globals.set:
+          id: visit_started_at
+          value: !lambda return millis();
+      - script.execute: emergency_stop
+    on_release:
+      - if:
+          all:
+            - switch.is_on: clean_every_visit
+            - switch.is_on: do_auto_clean
+            - lambda: return millis() - id(visit_started_at) >= 15000;  # stock: shorter visits don't plan a clean (PETIN TOO SHORT)
+          then:
+            - globals.set:
+                id: visit_clean
+                value: 'true'
+            - if:
+                condition:
+                  lambda: return id(cleans_left) <= 0;
+                then:
+                  globals.set:
+                    id: cleans_left
+                    value: !lambda return id(clean_times).state;
+      - script.execute: auto_clean
+
+  - platform: template
+    id: tray_full
+    name: Tray Full
+    icon: mdi:tray-full
+    device_class: problem
+    entity_category: diagnostic
+    lambda: return id(bin_full) || id(waste_collected) >= id(tray_capacity).state;
+
+  - platform: template
+    id: motor_error_sensor
+    name: Motor Error
+    icon: mdi:engine-off-outline
+    device_class: problem
+    entity_category: diagnostic
+    lambda: return id(motor_error) != 0;
+
+  - platform: template
+    id: movement_blocked
+    name: Movement Blocked
+    icon: mdi:lock
+    entity_category: diagnostic
+    lambda: return ${movement_blocked};
+
+  - platform: template
+    name: Level Needed
+    icon: mdi:compare-horizontal
+    device_class: problem
+    entity_category: diagnostic
+    lambda: return id(level_needed);
+
+  - platform: template
+    id: clean_pending
+    name: Clean Pending
+    icon: mdi:recycle-variant
+    device_class: running
+    entity_category: diagnostic
+    condition:
+      script.is_running: clean_if_needed
+
+  - platform: gpio
+    name: Menu Button
+    entity_category: diagnostic
+    pin:
+      number: GPIO34
+      inverted: yes
+    on_click:  # stock: opens the menu, then steps through it; after the last item it closes
+      lambda: |-
+        if (${busy}) return;
+        id(menu_page) = id(menu_page) >= ${menu_items} ? 0 : id(menu_page) + 1;
+        id(menu_at) = millis();
+    on_multi_click:
+      timing:
+        - ON for at least 2s
+      then:
+        button.press: reboot
+
+  - platform: gpio
+    name: OK Button
+    entity_category: diagnostic
+    pin:
+      number: GPIO0
+      inverted: yes
+      ignore_strapping_warning: yes
+    on_click:
+      if:
+        condition:
+          lambda: return id(menu_page) != 0;
+        then:  # stock: OK starts the selected item; the actions keep their own safety checks
+          lambda: |-
+            const int page = id(menu_page);
+            id(menu_page) = page == ${menu_items} ? ${menu_wifi_qr} :
+                            page == ${menu_empty_litter} ? ${menu_empty_confirm} : 0;
+            id(menu_at) = millis();
+            switch (page) {
+              case 1: id(clean).turn_on(); break;
+              case 2: id(level).press(); break;
+              case ${menu_maintenance}: id(maintenance).toggle(); break;
+              case 5: id(bin_emptied_button).press(); break;
+              case ${menu_empty_confirm}: id(empty_litter).turn_on(); break;
+            }
+        else:
+          button.press: level
+
+  - platform: gpio
+    name: MCU
+    entity_category: diagnostic
+    disabled_by_default: yes
+    pin:
+      number: GPIO22
+      allow_other_uses: yes
+    trigger_on_initial_state: yes
+    on_press:  # ready
+      pkt4_mcu.init:
+    on_release:  # reset
+      pkt4_mcu.deinit:
+
+button:
+  - platform: template
+    id: level
+    name: Level
+    icon: mdi:spirit-level
+    on_press:
+      if:
+        condition:
+          switch.is_on: maintenance
+        then:
+          switch.turn_off: maintenance
+        else:
+          if:
+            condition:
+              switch.is_off: clean
+            then:
+              - globals.set:
+                  id: level_needed
+                  value: 'true'
+              - script.execute: level_if_needed
+
+  - platform: template
+    name: Reboot MCU
+    icon: mdi:chip
+    entity_category: diagnostic
+    on_press:
+      script.execute: mcu_reboot
+
+  - platform: template
+    name: Clear Motor Error
+    icon: mdi:engine-outline
+    entity_category: diagnostic
+    on_press:
+      - globals.set:
+          id: motor_error
+          value: '0'
+      - globals.set:
+          id: drum_stall_retries
+          value: '0'
+      - script.execute: level_if_needed
+
+  - platform: template
+    id: bin_emptied_button
+    name: Bin Emptied
+    icon: mdi:delete-restore
+    on_press:  # the bin sensor doesn't report removal on every unit
+      if:
+        condition:
+          binary_sensor.is_off: cover
+        then:
+          script.execute: bin_emptied
+
+  - platform: template
+    name: All Litter Removed
+    icon: mdi:delete-empty
+    entity_category: config
+    on_press:
+      if:
+        condition:
+          binary_sensor.is_off: cover
+        then:
+          - globals.set:
+              id: litter_mass
+              value: '0'
+          - globals.set:
+              id: waste_collected
+              value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(litter_mass)));
+
+  - platform: template
+    name: Weight Calibration Zero
+    icon: mdi:scale-balance
+    entity_category: diagnostic
+    on_press:
+      if:
+        condition:
+          binary_sensor.is_off: cover
+        then:
+          globals.set:
+            id: weight_zero
+            value: !lambda return id(weight).get_raw_state();
+
+  - platform: restart
+    name: Restart
+    id: reboot
+    entity_category: diagnostic
+
+  - platform: safe_mode
+    name: Restart Safe Mode
+    entity_category: diagnostic
+    disabled_by_default: yes
+
+  - platform: factory_reset
+    name: Factory Reset
+    disabled_by_default: yes
+
+switch:
+  - platform: template
+    id: clean
+    name: Clean
+    icon: mdi:recycle
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:
+      if:
+        all:
+          - switch.is_off: maintenance
+          - switch.is_off: empty_litter
+          - binary_sensor.is_off: approach
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: bin
+          - binary_sensor.is_off: drum_up
+          - lambda: return !(${movement_blocked});
+          - lambda: return id(clean).state || !id(tray_full).state;  # never start dumping into a full bin, even manually; a running clean may still resume
+          - lambda: return !id(motor_error);  # a failed drum move must be looked at first (Clear Motor Error)
+        then:
+          - globals.set:
+              id: clean_ran
+              value: 'true'
+          - if:
+              all:
+                - binary_sensor.is_on: drum_level  # already not level
+                - not:
+                    binary_sensor.is_on: tray
+              then:
+                pkt4_mcu.motor:
+                  motor: tray
+                  direction: open
+                  speed: 100
+                  mode: time
+                  timeout: 80
+                  pos: open
+              else:
+                - script.stop: clean_if_needed
+                - globals.set:
+                    id: waste_pending
+                    value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(litter_mass)));
+                - pkt4_mcu.motor:
+                    motor: drum
+                    direction: up
+                    speed: 100
+                    mode: time
+                    timeout: 1000
+                    pos: dump  # the MCU stops at the dump sensor itself, as stock does
+        else:
+          if:
+            all:  # resuming while held at dump (a pet came during the pause): carry on down instead of dropping the cleaning
+              - lambda: return id(clean).state;
+              - binary_sensor.is_on: drum_up
+            then:
+              script.execute: level_if_needed
+            else:
+              - if:
+                  condition:  # a start, not a running clean stopped by a check: show why on the display
+                    lambda: return !id(clean_ran);
+                  then:
+                    script.execute: show_refusal
+              - delay: 0s  # yield
+              - switch.turn_off: clean
+    turn_off_action:
+      - pkt4_mcu.motor:
+          motor: drum
+          mode: stop
+      - if:
+          condition:
+            - lambda: return (!id(level_needed));
+          then:
+            pkt4_mcu.motor:
+              motor: tray
+              direction: close
+              speed: 5
+              mode: time
+              timeout: 80
+              pos: closed
+    on_turn_off:  # the waste summary only after a cleaning that really ran, not after a refused start
+      lambda: |-
+        if (id(clean_ran)) id(cleaned_at) = millis();
+        id(clean_ran) = false;
+
+  - platform: template
+    id: maintenance
+    name: Maintenance
+    icon: mdi:progress-wrench
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:  # stock recipe 9: close the flap, then a relative move up toward dump
+      if:
+        all:
+          - switch.is_off: clean
+          - switch.is_off: empty_litter
+          - lambda: return !(${movement_blocked});
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: bin
+          - binary_sensor.is_off: drum_up
+          - binary_sensor.is_off: drum_level  # starts from level, so stock's alignment step isn't needed
+        then:
+          - if:
+              condition:
+                not:
+                  binary_sensor.is_off: tray
+              then:
+                - pkt4_mcu.motor:
+                    motor: tray
+                    direction: close
+                    speed: 100
+                    mode: time
+                    timeout: 80
+                    pos: closed
+                - wait_until:
+                    condition:
+                      binary_sensor.is_off: tray
+                    timeout: 10s
+          - if:
+              condition:
+                binary_sensor.is_off: tray
+              then:
+                pkt4_mcu.motor:
+                  motor: drum
+                  direction: up
+                  speed: 100
+                  mode: sense  # type 1: relative move by `duration` steps
+                  duration: 1000
+                  timeout: 800
+                  pos: dump
+              else:
+                switch.turn_off: maintenance
+        else:
+          - delay: 0s  # yield
+          - switch.turn_off: maintenance
+    turn_off_action:
+      - pkt4_mcu.motor:
+          motor: drum
+          mode: stop
+      - if:
+          condition:
+            binary_sensor.is_off: cover
+          then:
+            globals.set:
+              id: litter_mass
+              value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(waste_collected)));
+      - globals.set:
+          id: level_needed
+          value: 'true'
+      - script.execute: level_if_needed
+
+  - platform: template
+    id: empty_litter
+    name: Empty Litter
+    icon: mdi:delete-sweep
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:  # stock process 1: tips all the litter into the waste bin
+      if:
+        all:
+          - switch.is_off: clean
+          - switch.is_off: maintenance
+          - binary_sensor.is_off: approach
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
+          - binary_sensor.is_off: tray_full  # the litter would not fit in a full bin
+          - lambda: return !id(motor_error);
+          - not:
+              script.is_running: empty_litter_run
+        then:
+          - script.stop: clean_if_needed
+          - script.execute: empty_litter_run
+        else:
+          - script.execute: show_refusal
+          - delay: 0s  # yield
+          - switch.turn_off: empty_litter
+    turn_off_action:
+      if:
+        condition:  # a refused start never ran the recipe: nothing to undo
+          script.is_running: empty_litter_run
+        then:
+          - script.stop: empty_litter_run
+          - pkt4_mcu.motor:
+              motor: drum
+              mode: stop
+          - if:
+              condition:  # stock ends with its leveling tail: via smooth back to level, then the flap closes
+                lambda: return !id(motor_error);
+              then:
+                - globals.set:
+                    id: level_needed
+                    value: 'true'
+                - script.execute: level_if_needed
+
+  - platform: template
+    id: do_auto_clean
+    name: Auto Clean
+    icon: mdi:refresh-auto
+    entity_category: config
+    optimistic: yes
+    restore_mode: restore_default_off  # better safe than sorry!
+    on_turn_on:
+      script.execute: auto_clean
+
+  - platform: template
+    id: clean_every_visit
+    name: Clean After Every Visit
+    icon: mdi:paw
+    entity_category: config
+    optimistic: yes
+    restore_mode: restore_default_on  # stock behavior: the waste weight isn't looked at
+
+  - platform: template
+    id: block_movement
+    name: Block Movement
+    icon: mdi:lock-reset
+    entity_category: diagnostic
+    optimistic: yes
+    restore_mode: restore_default_off
+    on_turn_on:
+      - pkt4_mcu.motor:
+          motor: drum
+          mode: stop
+      - pkt4_mcu.motor:
+          motor: tray
+          mode: stop
+    on_turn_off:
+      script.execute: level_if_needed
+
+  - platform: template
+    id: motor_tray
+    name: Tray
+    icon: mdi:stack-overflow
+    entity_category: diagnostic
+    optimistic: no
+    restore_mode: disabled
+    lambda: return id(tray).state;
+    turn_on_action:
+      if:
+        all:
+          - binary_sensor.is_off: cover
+          - lambda: return !(${movement_blocked});
+        then:
+          pkt4_mcu.motor:
+            motor: tray
+            direction: open
+            speed: 100
+            mode: time
+            timeout: 80
+            pos: open
+    turn_off_action:
+      if:
+        all:
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
+        then:
+          pkt4_mcu.motor:
+            motor: tray
+            direction: close
+            speed: 100
+            mode: time
+            timeout: 80
+            pos: closed
+
+  - platform: template
+    id: motor_drum_down
+    name: Drum Down
+    icon: mdi:horizontal-rotate-counterclockwise
+    entity_category: diagnostic
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:
+      if:
+        all:
+          - binary_sensor.is_off: approach
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: drum_down
+          - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
+        then:
+          pkt4_mcu.motor:
+            motor: drum
+            direction: down
+            speed: 100
+            mode: time
+            timeout: 800
+            pos: smooth  # goes to smooth; the MCU stops there itself
+        else:
+          - delay: 0s  # yield
+          - switch.turn_off: motor_drum_down
+    turn_off_action:
+      pkt4_mcu.motor:
+        motor: drum
+        mode: stop
+
+  - platform: template
+    id: motor_drum_up
+    name: Drum Up
+    icon: mdi:horizontal-rotate-clockwise
+    entity_category: diagnostic
+    optimistic: yes
+    restore_mode: disabled
+    turn_on_action:
+      if:
+        all:
+          - binary_sensor.is_off: approach
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: cover
+          - binary_sensor.is_off: drum_up
+          - binary_sensor.is_off: bin
+          - lambda: return !(${movement_blocked});
+        then:
+          pkt4_mcu.motor:
+            motor: drum
+            direction: up
+            speed: 100
+            mode: time
+            timeout: 800
+            pos: dump  # goes to dump; the MCU stops there itself
+        else:
+          - delay: 0s  # yield
+          - switch.turn_off: motor_drum_up
+    turn_off_action:
+      pkt4_mcu.motor:
+        motor: drum
+        mode: stop
+
+number:
+  - platform: template
+    id: clean_after
+    name: Clean After
+    icon: mdi:cookie-clock-outline
+    entity_category: config
+    unit_of_measurement: min
+    mode: box
+    min_value: 0
+    max_value: 60
+    step: 1
+    optimistic: yes
+    restore_value: yes
+    initial_value: 1
+
+  - platform: template
+    id: clean_threshold
+    name: Clean Threshold
+    icon: mdi:hydraulic-oil-level
+    entity_category: config
+    unit_of_measurement: g
+    mode: box
+    min_value: 10
+    max_value: 100
+    step: 5
+    optimistic: yes
+    restore_value: yes
+    initial_value: 25
+
+  - platform: template
+    id: clean_times
+    name: Clean Times
+    icon: mdi:repeat-variant
+    entity_category: config
+    min_value: 1
+    max_value: 5
+    step: 1
+    optimistic: yes
+    restore_value: yes
+    initial_value: 1
+
+  - platform: template
+    id: pet_threshold
+    name: Pet Threshold
+    icon: mdi:paw
+    entity_category: config
+    unit_of_measurement: kg
+    mode: box
+    min_value: 0.10
+    max_value: 10.00
+    step: 0.10
+    optimistic: yes
+    restore_value: yes
+    initial_value: 1.00
+
+  - platform: template
+    id: litter_threshold
+    name: Litter Threshold
+    icon: mdi:pail
+    entity_category: config
+    unit_of_measurement: kg
+    mode: box
+    min_value: 1.00
+    max_value: 5.00
+    step: 0.10
+    optimistic: yes
+    restore_value: yes
+    initial_value: 2.00
+
+  - platform: template
+    id: tray_capacity
+    name: Tray Capacity
+    icon: mdi:tray-arrow-down
+    entity_category: config
+    unit_of_measurement: kg
+    mode: box
+    min_value: 0.10
+    max_value: 2.00
+    step: 0.10
+    optimistic: yes
+    restore_value: yes
+    initial_value: 1.00
+
+  - platform: template
+    name: Weight Calibration
+    icon: mdi:scale-balance
+    entity_category: diagnostic
+    mode: box
+    min_value: 0
+    max_value: 10
+    step: 0.01
+    initial_value: NaN
+    update_interval: never
+    set_action:
+      if:
+        condition:
+          binary_sensor.is_off: cover
+        then:
+          globals.set:
+            id: weight_scale
+            value: !lambda return ((float)x / (id(weight).get_raw_state() - id(weight_zero)));
+
+script:
+  - id: level_if_needed
+    then:
+      - delay: 0s  # yield
+      - if:
+          any:  # maintenance keeps the drum where it is until it's turned off; Empty Litter drives it itself
+            - lambda: return ${movement_blocked};
+            - switch.is_on: maintenance
+            - switch.is_on: empty_litter
+          then:
+            - script.stop: level_if_needed
+      - if:
+          all:
+            - lambda: return id(level_needed);
+            - binary_sensor.is_off: cover
+            - not:
+                binary_sensor.is_on: tray
+          then:
+            pkt4_mcu.motor:
+              motor: tray
+              direction: open
+              speed: 100
+              mode: time
+              timeout: 80
+              pos: open
+          else:
+            if:
+              all:
+                - lambda: return (!id(level_needed));
+                - switch.is_off: clean
+                - switch.is_off: maintenance
+                - binary_sensor.is_off: drum_level
+                - binary_sensor.is_off: cover
+                - binary_sensor.is_on: tray
+                - binary_sensor.is_off: bin
+              then:
+                pkt4_mcu.motor:
+                  motor: tray
+                  direction: close
+                  speed: 5
+                  mode: time
+                  timeout: 80
+                  pos: closed
+              else:
+                if:
+                  any:
+                    - lambda: return id(level_needed);
+                    - switch.is_on: clean
+                  then:
+                    if:
+                      all:
+                        - binary_sensor.is_off: approach
+                        - binary_sensor.is_off: pet_inside
+                        - binary_sensor.is_off: cover
+                        - binary_sensor.is_off: bin
+                        - binary_sensor.is_on: tray
+                        - switch.is_off: maintenance
+                      then:
+                        if:
+                          condition:
+                            - switch.is_on: clean
+                          then:
+                            if:
+                              condition:
+                                - binary_sensor.is_off: drum_down
+                              then:
+                                pkt4_mcu.motor:
+                                  motor: drum
+                                  direction: down
+                                  speed: 100
+                                  mode: time
+                                  timeout: 1000
+                                  pos: smooth  # the MCU stops at the smooth sensor itself, as stock does
+                              else:
+                                pkt4_mcu.motor:
+                                  motor: drum
+                                  direction: up
+                                  speed: 100
+                                  mode: time
+                                  timeout: 80
+                          else:  # plain leveling: let the MCU stop at the level sensor itself, as stock does
+                            if:
+                              condition:
+                                - binary_sensor.is_off: drum_level  # already level: the MCU won't move, so no release event will come
+                              then:
+                                - globals.set:
+                                    id: level_needed
+                                    value: 'false'
+                                - pkt4_mcu.motor:
+                                    motor: tray
+                                    direction: close
+                                    speed: 5
+                                    mode: time
+                                    timeout: 80
+                                    pos: closed
+                              else:
+                                if:
+                                  condition:
+                                    - binary_sensor.is_off: drum_down
+                                  then:  # stock leveling (FUN_4011ceb8): down past level to smooth, then back up to level (drum_down handler)
+                                    - globals.set:
+                                        id: smoothing
+                                        value: 'true'
+                                    - pkt4_mcu.motor:
+                                        motor: drum
+                                        direction: down
+                                        speed: 100
+                                        mode: time
+                                        timeout: 1000
+                                        pos: smooth
+                                  else:
+                                    pkt4_mcu.motor:
+                                      motor: drum
+                                      direction: up
+                                      speed: 100
+                                      mode: time
+                                      timeout: 800
+                                      pos: level
+
+  - id: clean_if_needed
+    mode: restart
+    then:
+      - delay: !lambda return id(clean_after).state*60000;
+      - wait_until:  # don't drop the clean if a pet is still around when the delay ends
+          all:
+            - binary_sensor.is_off: approach
+            - binary_sensor.is_off: pet_inside
+      - if:
+          condition:
+            lambda: return ${movement_blocked};
+          then:
+            - script.stop: clean_if_needed
+      - if:
+          all:
+            - switch.is_off: maintenance
+            - binary_sensor.is_off: pet_inside
+            - any:
+              - all:
+                - switch.is_on: do_auto_clean
+                - lambda: |-
+                    if (id(clean_every_visit).state) return id(visit_clean);  // stock: clean after every valid visit, whatever the waste
+                    return id(pet_weight).state*1000 > id(clean_threshold).state;
+              - lambda: return (id(cleans_left) > 0 && id(cleans_left) < id(clean_times).state);
+          then:
+            - globals.set:
+                id: visit_clean
+                value: 'false'
+            - switch.turn_on: clean
+          else:
+            - globals.set:
+                id: visit_clean
+                value: 'false'
+            - globals.set:
+                id: cleans_left
+                value: '0'
+            - script.execute: level_if_needed
+
+  - id: bin_emptied
+    then:
+      - globals.set:
+          id: litter_discarded
+          value: !lambda return (id(litter_discarded) + max(0.f, (id(litter_mass) - max(0.f, id(weight).state))));
+      - globals.set:
+          id: waste_collected
+          value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(litter_mass)));
+      - globals.set:
+          id: litter_mass
+          value: !lambda return max(0.f, (max(0.f, id(weight).state) - id(waste_collected)));
+      - globals.set:
+          id: bin_full
+          value: 'false'
+      - script.execute: level_if_needed
+
+  # Empty Litter, stock process 1 (recipe FUN_4011d998 case 1, 0x4011dda8): open the flap, then the drum goes
+  # up to dump and down to smooth, 4 times up and 3 times down, 500 ms apart, and ends at dump. Stock then appends
+  # its leveling tail (FUN_4011cd9c): via smooth back to level, flap closed; Empty Litter's turn_off_action does it.
+  - id: empty_litter_run
+    mode: single
+    then:
+      - delay: 0s  # yield: the switch publishes its state after its turn_on_action
+      - globals.set:
+          id: empty_step
+          value: '0'
+      - globals.set:
+          id: empty_weight_start
+          value: !lambda return max(0.f, id(weight).state);
+      - if:
+          condition:
+            not:
+              binary_sensor.is_on: tray
+          then:
+            - pkt4_mcu.motor:
+                motor: tray
+                direction: open
+                speed: 100
+                mode: time
+                timeout: 80
+                pos: open
+            - wait_until:
+                condition:
+                  binary_sensor.is_on: tray
+                timeout: 10s
+      - if:
+          condition:
+            not:
+              binary_sensor.is_on: tray
+          then:
+            - logger.log:
+                level: WARN
+                format: "Empty Litter: the flap didn't open"
+            - globals.set:
+                id: empty_step
+                value: '-1'
+      - while:
+          condition:
+            lambda: return id(empty_step) >= 0 && id(empty_step) < 7 && !id(motor_error);
+          then:
+            - wait_until:  # a pet, the cover or the bin pauses the recipe; a drum stall backs off first
+                all:
+                  - binary_sensor.is_off: approach
+                  - binary_sensor.is_off: pet_inside
+                  - binary_sensor.is_off: cover
+                  - binary_sensor.is_off: bin
+                  - lambda: return !(${movement_blocked}) && !id(drum_stall).is_running();
+            - if:
+                condition:
+                  lambda: return id(empty_step) % 2 == 0;
+                then:
+                  pkt4_mcu.motor:
+                    motor: drum
+                    direction: up
+                    speed: 100
+                    mode: time
+                    timeout: 1000
+                    pos: dump
+                else:
+                  pkt4_mcu.motor:
+                    motor: drum
+                    direction: down
+                    speed: 100
+                    mode: time
+                    timeout: 1000
+                    pos: smooth
+            - wait_until:
+                condition:
+                  lambda: |-
+                    return (id(empty_step) % 2 == 0 ? id(drum_up).state : id(drum_down).state) ||
+                           id(approach).state || id(pet_inside).state || id(cover).state || id(bin).state ||
+                           ${movement_blocked} || id(motor_error) || id(drum_stall).is_running();
+                timeout: 120s
+            - if:
+                condition:
+                  lambda: |-
+                    return id(empty_step) % 2 == 0 ? id(drum_up).state : id(drum_down).state;
+                then:
+                  - globals.set:
+                      id: empty_step
+                      value: !lambda return id(empty_step) + 1;
+                  - delay: 500ms
+                else:
+                  if:
+                    condition:  # neither reached nor interrupted: give up rather than loop
+                      lambda: |-
+                        return !(id(approach).state || id(pet_inside).state || id(cover).state || id(bin).state ||
+                                 ${movement_blocked} || id(motor_error) || id(drum_stall).is_running());
+                    then:
+                      - logger.log:
+                          level: WARN
+                          format: "Empty Litter: drum move %d didn't reach its position"
+                          args: [id(empty_step)]
+                      - globals.set:
+                          id: empty_step
+                          value: '-1'
+      - if:
+          condition:
+            lambda: return id(empty_step) == 7;
+          then:
+            script.execute: empty_litter_done
+      - switch.turn_off: empty_litter
+
+  - id: empty_litter_done  # once back at level: what left the drum went to the bin
+    mode: single
+    then:
+      - wait_until:
+          condition:
+            all:
+              - binary_sensor.is_off: drum_level
+              - binary_sensor.is_off: cover
+              - lambda: return !id(level_needed);
+          timeout: 5min
+      - delay: 5s  # let the weight settle
+      - lambda: |-
+          const float now = max(0.f, id(weight).state),
+                      emptied = max(0.f, id(empty_weight_start) - now);
+          id(waste_collected) += emptied;  // litter and waste are now in the bin: Tray Full until it's emptied
+          id(litter_discarded) += max(0.f, id(litter_mass) - now);
+          id(litter_mass) = now;  // whatever stayed in the drum
+          id(waste_pending) = 0;
+          ESP_LOGI("empty_litter", "Emptied %.2f kg into the bin, %.2f kg left in the drum", emptied, now);
+
+  - id: auto_clean
+    then:
+      if:
+        all:
+          - switch.is_on: do_auto_clean
+          - switch.is_off: clean
+          - switch.is_off: maintenance
+          - switch.is_off: empty_litter
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: tray_full
+          - lambda: return !id(motor_error);
+          - lambda: return id(cleans_left) > 0;
+        then:
+          - script.execute: clean_if_needed
+          - globals.set:
+              id: cleans_left
+              value: !lambda return id(cleans_left)-1;
+        else:
+          if:
+            all:
+              - switch.is_on: clean
+              - switch.is_off: maintenance
+              - binary_sensor.is_off: pet_inside
+            then:
+              switch.turn_on: clean  # resume
+            else:
+              script.execute: level_if_needed
+
+  - id: drum_stall  # stop code 4, as stock (FUN_4011d300, FUN_4011cbc4): pause 14 s, back off 400 steps, retry; 4th time: give up and level
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: return id(drum_stall_retries) < 3;
+          then:
+            - globals.set:
+                id: drum_stall_retries
+                value: !lambda return id(drum_stall_retries) + 1;
+            - delay: 14s
+            - if:
+                all:
+                  - lambda: return !(${movement_blocked});
+                  - binary_sensor.is_off: cover
+                  - binary_sensor.is_off: approach
+                  - binary_sensor.is_off: pet_inside
+                then:
+                  - if:
+                      condition:
+                        lambda: return id(mcu).last_direction(0) == 2;
+                      then:
+                        pkt4_mcu.motor:
+                          motor: drum
+                          direction: down
+                          speed: 100
+                          mode: sense
+                          duration: 400
+                          timeout: 800
+                      else:
+                        pkt4_mcu.motor:
+                          motor: drum
+                          direction: up
+                          speed: 100
+                          mode: sense
+                          duration: 400
+                          timeout: 800
+                  - delay: 5s  # 400 steps take about 4 s
+            - script.execute: auto_clean  # resumes the cleaning, or levels
+          else:
+            if:
+              condition:  # level only once: if that stalls too, the drum stays put until Clear Motor Error
+                lambda: return !id(motor_error);
+              then:
+                - globals.set:
+                    id: motor_error
+                    value: '4'
+                - if:
+                    condition:
+                      switch.is_on: clean
+                    then:
+                      switch.turn_off: clean
+                - if:
+                    condition:
+                      switch.is_on: empty_litter
+                    then:
+                      switch.turn_off: empty_litter
+                - globals.set:
+                    id: level_needed
+                    value: 'true'
+                - script.execute: level_if_needed
+
+  - id: mcu_reboot  # only when idle: a reboot stops whatever the MCU is doing
+    then:
+      if:
+        all:
+          - lambda: return !id(mcu).link_lost();
+          - lambda: return id(ha_time).now().is_valid();
+          - switch.is_off: clean
+          - switch.is_off: maintenance
+          - switch.is_off: empty_litter
+          - switch.is_off: motor_drum_up
+          - switch.is_off: motor_drum_down
+          - binary_sensor.is_off: tray
+          - binary_sensor.is_off: pet_inside
+          - binary_sensor.is_off: approach
+          - lambda: return !id(level_needed) && !id(clean_if_needed).is_running() && !id(drum_stall).is_running();
+        then:
+          - pkt4_mcu.reboot:
+          - globals.set:
+              id: mcu_rebooted_at
+              value: !lambda return id(ha_time).now().timestamp;
+        else:
+          logger.log:
+            level: WARN
+            format: "MCU reboot postponed: not idle"
+
+  - id: show_refusal  # Clean or Empty Litter refused to start: keep the first failing check for the display
+    then:
+      - lambda: |-
+          int reason = 0;  // indexes the display's reasons[]
+          if (id(approach).state || id(pet_inside).state) reason = 1;
+          else if (id(cover).state) reason = 2;
+          else if (id(bin).state) reason = 3;
+          else if (id(tray_full).state) reason = 4;
+          else if (id(motor_error)) reason = 5;
+          else if (${movement_blocked}) reason = 6;
+          else if (id(maintenance).state) reason = 7;
+          else if (id(clean).state || id(empty_litter_run).is_running()) reason = 8;
+          else if (id(drum_up).state) reason = 9;
+          id(refused_reason) = reason;
+          id(refused_at) = millis();
+
+  - id: emergency_stop
+    then:
+      - pkt4_mcu.motor:
+          motor: drum
+          mode: stop
+      - globals.set:
+          id: smoothing
+          value: 'false'
+      - if:
+          all:
+            - switch.is_off: clean
+            - switch.is_off: maintenance
+            - binary_sensor.is_on: drum_level
+          then:
+            globals.set:
+              id: level_needed
+              value: 'true'
+
+# by Sdore, 2024-26
+#   www.sdore.me
+
+interval:
+  - interval: 1s  # stock closes a menu page after 10 s without a press, the Wi-Fi page after 60 s
+    then:
+      lambda: |-
+        if (!id(menu_page)) return;
+        if (${busy} ||
+            millis() - id(menu_at) >= (id(menu_page) == ${menu_wifi_qr} ? 60000u : 10000u))
+          id(menu_page) = 0;
+
+  - interval: 1h  # stock reboots the MCU when its last reboot is 7 days old (604800 s)
+    then:
+      - lambda: |-
+          auto now = id(ha_time).now();
+          if (!now.is_valid()) return;
+          if (!id(mcu_rebooted_at) || uint32_t(now.timestamp) < id(mcu_rebooted_at))
+            id(mcu_rebooted_at) = now.timestamp;  // first run, or the clock went back: count 7 days from now
+      - if:
+          condition:
+            lambda: return id(ha_time).now().is_valid() && uint32_t(id(ha_time).now().timestamp) - id(mcu_rebooted_at) >= 604800;
+          then:
+            script.execute: mcu_reboot
