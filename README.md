@@ -9,28 +9,39 @@ It's able to work completely offline & without HA, although it's recommended to 
 
 ## Installing from the ESPHome Device Builder
 
-The firmware lives in [`t4.yaml`](t4.yaml) and has no secrets in it. [`petkit.yaml`](petkit.yaml) only adds your `secrets.yaml`, for local builds. To build from the ESPHome Device Builder (the Home Assistant add-on), paste this as the device config. The Builder then pulls the firmware from this repository:
+The firmware lives in [`t4.yaml`](t4.yaml) and has no secrets in it. [`petkit.yaml`](petkit.yaml) only adds your `secrets.yaml`, for local builds. Once the litter box runs ESPHome (first flash: see the [install guide](https://triskae.github.io/esphome-petkit-t4/)), the ESPHome Device Builder (the ESPHome add-on of Home Assistant) can keep it up to date. It pulls the firmware from this repository and updates it over Wi-Fi when ESPHome or the firmware gets a new version.
 
-```yaml
-substitutions:
-  ap_ssid: !secret ap_ssid
-  ap_password: !secret ap_password
-  ota_password: !secret ota_password
-  api_encryption_key: !secret api_encryption_key
+1. In the Device Builder, open *Secrets* (top right) and add the six lines of your `secrets.yaml`: `wifi_ssid`, `wifi_password`, `ap_ssid`, `ap_password`, `ota_password` and `api_encryption_key`.
+   - **Use the same values**: the Builder needs that OTA password to update the device, and Home Assistant needs that API key to keep talking to it.
+   - If those names are already taken, rename them and use the new names below.
+2. If the litter box shows up as *Discovered* with an *Adopt* button, **don't adopt it**: that would import another configuration. Click *Ignore*.
+3. Click *New device*, then *Continue*, name it `petkit-t4`, pick *ESP32*, and close the dialog without installing.
+4. On the `petkit-t4` card, click *Edit*, replace the whole content with this, and *Save*:
 
-packages:
-  t4:
-    url: https://github.com/Triskae/esphome-petkit-t4
-    ref: master
-    refresh: 0s
-    files: [t4.yaml]
+   ```yaml
+   substitutions:
+     ap_ssid: !secret ap_ssid
+     ap_password: !secret ap_password
+     ota_password: !secret ota_password
+     api_encryption_key: !secret api_encryption_key
 
-wifi:
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
-```
+   packages:
+     t4:
+       url: https://github.com/Triskae/esphome-petkit-t4
+       ref: master
+       refresh: 0s
+       files: [t4.yaml]
 
-`refresh: 0s` fetches the latest version on every validation or install. Set a commit or a tag in `ref` to stay on a fixed version.
+   wifi:
+     ssid: !secret wifi_ssid
+     password: !secret wifi_password
+   ```
+5. In the card menu (⋮), click *Validate*: it must end with `Configuration is valid!`.
+6. Click *Install* → *Wirelessly*. The settings and the weight calibration stay on the device.
+
+**Updates:** when the card shows *Update* (after an update of the ESPHome add-on), click it, or *Update All*. `refresh: 0s` fetches the latest version of this repository each time. To stay on a fixed version, put a commit or a tag in `ref`. If the Builder still uses an old copy of the files, click *Clean Build Files* in the card menu.
+
+**Device name:** keep `petkit-t4`. It is how the Builder finds the litter box on the network.
 
 
 ## Features

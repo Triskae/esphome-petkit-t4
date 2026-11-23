@@ -28,6 +28,7 @@
 			<li><a href="#compile">Compile the firmware</a></li>
 			<li><a href="#flash">Flash ESPHome</a></li>
 			<li><a href="#first-boot">First boot</a></li>
+			<li><a href="#device-builder">Updates from the ESPHome Device Builder</a></li>
 			<li><a href="#restore">Restore the stock firmware</a></li>
 			<li><a href="#troubleshooting">Troubleshooting</a></li>
 		</ol>
@@ -241,8 +242,39 @@ cd esphome-petkit-t4</pre></li>
 		<p>Next updates are wireless: <code>esphome run petkit.yaml</code> uses the OTA password of step 5, no need to open the device again.</p>
 	</section>
 
+	<section class="step" id="device-builder">
+		<h2>9. Updates from the ESPHome Device Builder</h2>
+		<p>Optional. Instead of <code>esphome run petkit.yaml</code> from your computer, the ESPHome Device Builder (the ESPHome add-on of Home Assistant) can keep the litter box up to date: it pulls the firmware from this repository and updates it over Wi-Fi when ESPHome or the firmware gets a new version.</p>
+		<ol>
+			<li>Open the ESPHome Device Builder, then <em>Secrets</em> (top right). Add the six lines of your <code>secrets.yaml</code> from step 5: <code>wifi_ssid</code>, <code>wifi_password</code>, <code>ap_ssid</code>, <code>ap_password</code>, <code>ota_password</code>, <code>api_encryption_key</code>. <strong>Use the same values</strong>: the Builder needs that OTA password to update the device, and Home Assistant that API key to keep talking to it. Rename them if those names are already taken, and use the new names below.</li>
+			<li>If the litter box shows up as <em>Discovered</em> with an <em>Adopt</em> button, <strong>don't adopt it</strong>: that would import another configuration. Click <em>Ignore</em>.</li>
+			<li>Click <em>New device</em>, then <em>Continue</em>, name it <code>petkit-t4</code>, pick <em>ESP32</em>, and close the dialog without installing anything.</li>
+			<li>On the new <code>petkit-t4</code> card, click <em>Edit</em>, replace the whole content with this, and <em>Save</em>:
+<pre>substitutions:
+  ap_ssid: !secret ap_ssid
+  ap_password: !secret ap_password
+  ota_password: !secret ota_password
+  api_encryption_key: !secret api_encryption_key
+
+packages:
+  t4:
+    url: https://github.com/Triskae/esphome-petkit-t4
+    ref: master
+    refresh: 0s
+    files: [t4.yaml]
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password</pre></li>
+			<li>In the card menu (&#8942;), click <em>Validate</em>: it must end with <code>Configuration is valid!</code>.</li>
+			<li>Click <em>Install</em> → <em>Wirelessly</em>. The settings and the weight calibration stay on the device.</li>
+		</ol>
+		<p>From then on, when the card shows <em>Update</em> (after an update of the ESPHome add-on), click it, or <em>Update All</em>. <code>refresh: 0s</code> fetches the latest version of this repository each time; put a commit or a tag in <code>ref</code> to stay on a fixed version.</p>
+		<p class="note">The device name must stay <code>petkit-t4</code>: it is how the Builder finds the litter box on the network. If the Builder still uses an old copy of the files, click <em>Clean Build Files</em> in the card menu.</p>
+	</section>
+
 	<section class="step" id="restore">
-		<h2>9. Restore the stock firmware</h2>
+		<h2>10. Restore the stock firmware</h2>
 		<p>Writing the 8 MB backup back brings the device to the exact state it was in, factory calibration and pairing included. Use the backup of <strong>this same unit</strong>, never another one's.</p>
 		<div class="callout warn"><p>The restore hasn't been tried on a device yet.</p></div>
 		<div class="tool">
@@ -264,7 +296,7 @@ python -m esptool --chip esp32 --port /dev/cu.usbserial-XXXX --baud 115200 --bef
 	</section>
 
 	<section class="step" id="troubleshooting">
-		<h2>10. Troubleshooting</h2>
+		<h2>11. Troubleshooting</h2>
 		<table>
 			<tr><th>Symptom</th><th>Fix</th></tr>
 			<tr><td><code>Failed to connect</code>, no answer</td><td>Wrong header (use the one next to the ESP32), TX and RX swapped, or the device isn't in download mode: hold OK while plugging the power in.</td></tr>
