@@ -1769,11 +1769,14 @@ script:
                 - lambda: |-
                     if (id(clean_every_visit).state) return id(visit_clean);  // stock: clean after every valid visit, whatever the waste
                     return id(pet_weight).state*1000 > id(clean_threshold).state;
-              - lambda: return (id(cleans_left) > 0 && id(cleans_left) < id(clean_times).state);
+              - lambda: return (id(cleans_left) > 0 && id(cleans_left) < id(clean_times).state);  # repeat of a started series
           then:
             - globals.set:
                 id: visit_clean
                 value: 'false'
+            - globals.set:  # spent here, so Clean Times = N gives N cleanings (spent when planned, it gave N-1 and an empty pending)
+                id: cleans_left
+                value: !lambda return max(0, id(cleans_left)-1);
             - switch.turn_on: clean
           else:
             - globals.set:
@@ -1940,10 +1943,7 @@ script:
           - lambda: return !id(motor_error);
           - lambda: return id(cleans_left) > 0;
         then:
-          - script.execute: clean_if_needed
-          - globals.set:
-              id: cleans_left
-              value: !lambda return id(cleans_left)-1;
+          script.execute: clean_if_needed  # cleans_left is spent when the clean starts, not when it is planned
         else:
           if:
             all:

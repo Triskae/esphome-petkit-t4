@@ -11,6 +11,12 @@ Like the stock firmware, a cleaning is planned after every valid visit, whether 
 | Pending clean | `Clean Pending` on for `Clean After`; restarted when `Approach` clears, and waits for the pet to leave if it is still in front or inside when the delay ends ([details](motion.md#fixed-pending-clean-dropped-when-a-pet-is-in-front)) |
 | Cleaning | `Clean Times` cleanings, unless maintenance, `Tray Full`, `Block Movement` or an OTA prevents it |
 
+Each repeat waits `Clean After` again, with `Clean Pending` on, before it starts.
+
+### Fixed: one cleaning short with `Clean Times` above 1
+
+`cleans_left` was spent when a cleaning was planned instead of when it started, so the repeat check (`cleans_left > 0`) failed one cleaning early: `Clean Times = N` gave N−1 cleanings followed by a pending clean that ended without cleaning, only leveling. Observed on 24 November 2026 with `Clean Times = 3`: two cleanings per visit, then a third `Clean Pending` that expired at 20:01 with no cleaning. `cleans_left` is now spent when `Clean` is turned on, so `Clean Times = N` gives N cleanings and no empty pending at the end.
+
 Turning `Clean After Every Visit` off restores the weight-based decision: a cleaning is planned only when the residual weight exceeds `Clean Threshold`.
 
 ## Why
